@@ -8,6 +8,29 @@ import (
 	"pico_co2/internal/types/status"
 )
 
+// FormatTime returns the normal display string for a clock time.
+func FormatTime(hour, minute int) string {
+	return fmt.Sprintf("%d:%02d", hour, minute)
+}
+
+// FormatEditTime returns the display string for clock edit mode.
+// The selected field is indicated by square brackets for numeric fields
+// or by the action label for save/cancel fields.
+func FormatEditTime(field int, hour, minute int) string {
+	switch field {
+	case types.EditFieldHour:
+		return fmt.Sprintf("[%d]:%02d", hour, minute)
+	case types.EditFieldMinute:
+		return fmt.Sprintf("%d:[%02d]", hour, minute)
+	case types.EditFieldSave:
+		return "[SAVE] EXIT"
+	case types.EditFieldCancel:
+		return "SAVE [EXIT]"
+	default:
+		return FormatTime(hour, minute)
+	}
+}
+
 func RenderTime(renderer Renderer, r *types.Readings) {
 	if renderer == nil {
 		return
@@ -20,6 +43,7 @@ func RenderTime(renderer Renderer, r *types.Readings) {
 		x         int16
 		co2status int16
 		lf        = renderer.GetFont(font.FreemonoRegular18)
+		mf        = renderer.GetFont(font.FreemonoRegular9)
 		sf        = renderer.GetFont(font.ProggySZ8)
 	)
 
@@ -51,9 +75,16 @@ func RenderTime(renderer Renderer, r *types.Readings) {
 
 	// second line
 	y = 10
-	timeStr := fmt.Sprintf("%d:%02d", r.Time.Hour, r.Time.Minute)
-	xTime := (width - lf.CalcWidth(timeStr)) / 2
-	lf.Print(xTime, y, timeStr)
+	var lineStr string
+	if r.ClockEdit.Active {
+		lineStr = FormatEditTime(r.ClockEdit.Field, r.ClockEdit.Hour, r.ClockEdit.Minute)
+		xLine := (width - mf.CalcWidth(lineStr)) / 2
+		mf.Print(xLine, y, lineStr)
+	} else {
+		lineStr = FormatTime(r.Time.Hour, r.Time.Minute)
+		xLine := (width - lf.CalcWidth(lineStr)) / 2
+		lf.Print(xLine, y, lineStr)
+	}
 
 	renderer.Display()
 }

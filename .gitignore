@@ -1,3 +1,6 @@
 .aider*
 .idea
 *.uf2
+
+# ralphex progress logs
+.ralphex/progress/

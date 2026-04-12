@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"machine"
 	"pico_co2/internal/button"
+	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
+	"pico_co2/internal/rtc"
 	"pico_co2/internal/types"
 	"pico_co2/pkg/ens160"
 	"time"
@@ -217,7 +219,10 @@ type App struct {
 	displayManager *DisplayManager
 	button1        *button.TouchButton
 	button2        *button.TouchButton
-	ds3231         *ds3231.Device
+	rtc            rtc.RTC
+	editor         clockedit.EditorState
+	lastLeftTime   time.Time
+	lastRightTime  time.Time
 }
 
 func New(cfg Config) (*App, error) {
@@ -263,7 +268,7 @@ func New(cfg Config) (*App, error) {
 		displayManager: NewDisplayManager(renderer, cfg.DefaultDisplayIndex),
 		button1:        button.NewTouchButton(cfg.Buttons.Button1),
 		button2:        button.NewTouchButton(cfg.Buttons.Button2),
-		ds3231:         &ds3231Sensor,
+		rtc:            &ds3231Sensor,
 	}, nil
 }
 
@@ -290,14 +295,78 @@ func (a *App) Run() {
 }
 
 func (a *App) handleInput(readings *types.Readings) {
-	if a.button1.Consume() {
-		a.displayManager.PreviousDisplay()
-		readings.IsDrawen = false
+	now := time.Now()
+	leftPressed := a.button1.Consume()
+	rightPressed := a.button2.Consume()
+
+	if leftPressed {
+		a.lastLeftTime = now
+	}
+	if rightPressed {
+		a.lastRightTime = now
 	}
 
-	if a.button2.Consume() {
-		a.displayManager.NextDisplay()
+	ev := clockedit.ButtonEvent{
+		LeftPressed:  leftPressed,
+		RightPressed: rightPressed,
+		LeftTime:     a.lastLeftTime,
+		RightTime:    a.lastRightTime,
+	}
+
+	onTimeScreen := a.displayManager.currentIndex == 0
+	result := clockedit.ProcessInput(a.editor, ev, onTimeScreen, clockedit.DefaultSimultaneousWindow)
+
+	if result.AttemptEntry {
+		a.editor = clockedit.Enter(readings.Time.Hour, readings.Time.Minute)
+		a.lastLeftTime = time.Time{}
+		a.lastRightTime = time.Time{}
 		readings.IsDrawen = false
+		return
+	}
+
+	if result.Exited {
+		if result.ShouldSave {
+			a.handleSave(readings, result.State)
+		} else {
+			a.editor = clockedit.EditorState{}
+		}
+		a.lastLeftTime = time.Time{}
+		a.lastRightTime = time.Time{}
+		readings.IsDrawen = false
+		return
+	}
+
+	a.editor = result.State
+	if result.NavLeft {
+		a.displayManager.PreviousDisplay()
+		a.lastLeftTime = time.Time{}
+	}
+	if result.NavRight {
+		a.displayManager.NextDisplay()
+		a.lastRightTime = time.Time{}
+	}
+	if result.RedrawNeeded {
+		readings.IsDrawen = false
+	}
+}
+
+func (a *App) handleSave(readings *types.Readings, state clockedit.EditorState) {
+	curTime, readErr := a.rtc.ReadTime()
+	if readErr != nil {
+		a.editor = clockedit.HandleSaveAttempt(state, readErr)
+		readings.Error = fmt.Sprintf("RTC read: %v", readErr)
+		return
+	}
+
+	newTime, saveErr := rtc.SaveTime(a.rtc, state.Hour, state.Minute, curTime)
+	a.editor = clockedit.HandleSaveAttempt(state, saveErr)
+	if saveErr != nil {
+		readings.Error = fmt.Sprintf("RTC save: %v", saveErr)
+	} else {
+		readings.Time.Hour = newTime.Hour()
+		readings.Time.Minute = newTime.Minute()
+		readings.Time.LastRead = time.Now()
+		readings.Error = ""
 	}
 }
 
@@ -306,7 +375,7 @@ func (a *App) updateReadings(readings *types.Readings) {
 		time.Since(readings.Time.LastRead) >= time.Duration(time.Second)
 
 	if shouldUpdateTimeRead {
-		curTime, err := a.ds3231.ReadTime()
+		curTime, err := a.rtc.ReadTime()
 		if err != nil {
 			readings.Error = fmt.Sprintf("DS3231: %v", err)
 			readings.IsDrawen = false
@@ -359,6 +428,12 @@ func (a *App) updateReadings(readings *types.Readings) {
 
 func (a *App) render(readings *types.Readings) {
 	if !readings.IsDrawen {
+		readings.ClockEdit = types.ClockEdit{
+			Active: a.editor.Active,
+			Field:  int(a.editor.Field),
+			Hour:   a.editor.Hour,
+			Minute: a.editor.Minute,
+		}
 		a.displayManager.Render(readings)
 		readings.IsDrawen = true
 	}

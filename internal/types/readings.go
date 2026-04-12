@@ -17,12 +17,30 @@ type Readings struct {
 	IsDrawen       bool
 	Error          string
 	Time           Time
+	ClockEdit      ClockEdit
 }
 
 type Time struct {
 	Hour    int
 	Minute  int
 	LastRead time.Time
+}
+
+// Clock edit field constants mirror clockedit.EditField values for use
+// by the display layer without importing the clockedit package.
+const (
+	EditFieldHour   = 0
+	EditFieldMinute = 1
+	EditFieldSave   = 2
+	EditFieldCancel = 3
+)
+
+// ClockEdit carries the display-relevant state of the clock editor.
+type ClockEdit struct {
+	Active bool
+	Field  int // one of EditFieldHour, EditFieldMinute, EditFieldSave, EditFieldCancel
+	Hour   int
+	Minute int
 }
 
 type RawReadings struct {
