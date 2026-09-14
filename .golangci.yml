@@ -1,9 +1,8 @@
+version: "2"
+
 linters:
-  # Disable all linters
-  disable-all: true
+  default: none
+
+formatters:
   enable:
     - gofmt
-
-issues:
-  exclude-dirs:
-    - vendor

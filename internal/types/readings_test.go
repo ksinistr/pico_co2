@@ -1,6 +1,7 @@
 package types
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -9,9 +10,9 @@ import (
 
 func TestCO2TrendCalculation(t *testing.T) {
 	tests := []struct {
-		name           string
-		readings       []uint16
-		expectedTrend  status.CO2Trend
+		name          string
+		readings      []uint16
+		expectedTrend status.CO2Trend
 	}{
 		{
 			name:          "Insufficient data",
@@ -91,5 +92,33 @@ func TestCO2TrendString(t *testing.T) {
 				t.Errorf("Expected %s, got %s", tt.expected, tt.trend.String())
 			}
 		})
+	}
+}
+
+func TestAddReadingsCalculatesMoisture(t *testing.T) {
+	r := InitReadings(128)
+
+	r.AddReadings(900, 24.0, 90.0)
+
+	if math.Abs(float64(r.Calculated.DewPointC-22.3)) > 0.2 {
+		t.Fatalf("DewPointC = %.2f, want around 22.3", r.Calculated.DewPointC)
+	}
+	if math.Abs(float64(r.Calculated.AbsoluteHumidityGM3-19.6)) > 0.2 {
+		t.Fatalf("AbsoluteHumidityGM3 = %.2f, want around 19.6", r.Calculated.AbsoluteHumidityGM3)
+	}
+}
+
+func TestAddReadingsStoresDewPointHistory(t *testing.T) {
+	r := InitReadings(128)
+	r.History.AddedAt = time.Now().Add(-2 * time.Minute)
+
+	r.AddReadings(900, 24.0, 90.0)
+
+	data := r.History.DewPoint.Contiguous()
+	if len(data) != 1 {
+		t.Fatalf("dew point history len = %d, want 1", len(data))
+	}
+	if data[0] != 22 {
+		t.Fatalf("dew point history value = %d, want 22", data[0])
 	}
 }

@@ -38,6 +38,14 @@ func RenderSparklineHI(renderer Renderer, r *types.Readings) {
 	renderSparkline(renderer, title, data, baseline)
 }
 
+func RenderSparklineDP(renderer Renderer, r *types.Readings) {
+	data := r.History.DewPoint.Contiguous()
+	title := "DP"
+	baseline := int16(18)
+
+	renderSparkline(renderer, title, data, baseline)
+}
+
 func renderSparkline(
 	renderer Renderer,
 	title string,

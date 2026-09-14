@@ -21,8 +21,8 @@ type Readings struct {
 }
 
 type Time struct {
-	Hour    int
-	Minute  int
+	Hour     int
+	Minute   int
 	LastRead time.Time
 }
 
@@ -56,15 +56,18 @@ type MeasurementHistory struct {
 	Temperature   *fifo.FIFO16
 	Humidity      *fifo.FIFO16
 	HeatIndexTemp *fifo.FIFO16
+	DewPoint      *fifo.FIFO16
 	AddedAt       time.Time
 	Granularity   time.Duration
 }
 
 type CalculatedReadings struct {
-	CO215MinAverage uint16
-	CO25MinAvgPrev  uint16
-	CO25MinAvgCurr  uint16
-	CO2Trend        status.CO2Trend
+	CO215MinAverage     uint16
+	CO25MinAvgPrev      uint16
+	CO25MinAvgCurr      uint16
+	CO2Trend            status.CO2Trend
+	DewPointC           float32
+	AbsoluteHumidityGM3 float32
 }
 
 func InitReadings(queueSize int) *Readings {
@@ -74,6 +77,7 @@ func InitReadings(queueSize int) *Readings {
 			Temperature:   fifo.NewFIFO16(queueSize),
 			Humidity:      fifo.NewFIFO16(queueSize),
 			HeatIndexTemp: fifo.NewFIFO16(queueSize),
+			DewPoint:      fifo.NewFIFO16(queueSize),
 			Granularity:   time.Minute,
 		},
 		Calculated: CalculatedReadings{
@@ -94,8 +98,13 @@ func (r *Readings) AddReadings(
 		r.FirstReadingAt = time.Now()
 	}
 
+	dewPoint := status.DewPointC(temperature, humidity)
+	r.Calculated.DewPointC = dewPoint
+	r.Calculated.AbsoluteHumidityGM3 = status.AbsoluteHumidityGM3(temperature, humidity)
+
 	if r.History.CO2 == nil || r.History.Temperature == nil ||
-		r.History.Humidity == nil || r.History.HeatIndexTemp == nil {
+		r.History.Humidity == nil || r.History.HeatIndexTemp == nil ||
+		r.History.DewPoint == nil {
 		return
 	}
 
@@ -107,6 +116,7 @@ func (r *Readings) AddReadings(
 		r.History.Humidity.Enqueue(int16(math.Round(float64(humidity))))
 		hiVal := status.HeatIndexVal(temperature, humidity)
 		r.History.HeatIndexTemp.Enqueue(int16(math.Round(float64(hiVal))))
+		r.History.DewPoint.Enqueue(int16(math.Round(float64(dewPoint))))
 		r.History.AddedAt = time.Now()
 	}
 
