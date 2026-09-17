@@ -2,9 +2,6 @@ package clockedit
 
 import "time"
 
-// ButtonEvent represents raw button consumption results with timestamps.
-// Timestamps record when each button was last consumed, as tracked by the
-// app layer using time.Now().
 type ButtonEvent struct {
 	LeftPressed  bool
 	RightPressed bool
@@ -12,24 +9,20 @@ type ButtonEvent struct {
 	RightTime    time.Time
 }
 
-// InputResult contains the outcome of processing button input through the
-// editor state machine.
 type InputResult struct {
 	State        EditorState
-	NavLeft      bool // normal left navigation requested
-	NavRight     bool // normal right navigation requested
-	AttemptEntry bool // try entering edit mode (app calls Enter)
-	ShouldSave   bool // save was confirmed by the user
-	Exited       bool // editor exited (save or cancel)
-	RedrawNeeded bool // display should be refreshed
+	NavLeft      bool
+	NavRight     bool
+	AttemptEntry bool
+	ShouldSave   bool
+	Exited       bool
+	RedrawNeeded bool
 }
 
 // DefaultSimultaneousWindow is the recommended window for detecting
 // near-simultaneous button presses.
 const DefaultSimultaneousWindow = 400 * time.Millisecond
 
-// DetectSimultaneous reports whether two button press timestamps fall within
-// the given window. Both must be pressed and both timestamps must be non-zero.
 func DetectSimultaneous(ev ButtonEvent, window time.Duration) bool {
 	if !ev.LeftPressed || !ev.RightPressed {
 		return false
@@ -44,9 +37,6 @@ func DetectSimultaneous(ev ButtonEvent, window time.Duration) bool {
 	return diff <= window
 }
 
-// ProcessInput resolves raw button input through the editor state machine.
-// It handles simultaneous-press detection, editor action routing, and normal
-// navigation fallback.
 func ProcessInput(state EditorState, ev ButtonEvent, onTimeScreen bool, window time.Duration) InputResult {
 	simultaneous := DetectSimultaneous(ev, window)
 	bothInCycle := ev.LeftPressed && ev.RightPressed
@@ -88,8 +78,6 @@ func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen bool, bo
 				RedrawNeeded: true,
 			}
 		}
-		// Both pressed on non-time screen: ignore both to prevent
-		// accidental entry attempts.
 		return InputResult{State: state}
 	}
 
@@ -105,9 +93,6 @@ func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen bool, bo
 	return result
 }
 
-// HandleSaveAttempt determines the new editor state after a save attempt.
-// On success (nil error) the editor is cleared. On failure the editor is
-// re-activated with the same hour/minute so the user can retry.
 func HandleSaveAttempt(state EditorState, saveErr error) EditorState {
 	if saveErr != nil {
 		return Enter(state.Hour, state.Minute)

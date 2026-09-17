@@ -2,66 +2,69 @@ package display
 
 import (
 	"fmt"
-	"pico_co2/internal/display/font"
+
 	"pico_co2/internal/types"
+	"pico_co2/pkg/font"
+	"pico_co2/pkg/layout"
+	"pico_co2/pkg/widget"
+	"tinygo.org/x/drivers"
 )
 
-func RenderSparklineCO2(renderer Renderer, r *types.Readings) {
+// RenderSparklineCO2 draws eight hours of CO2 history against 1000 ppm.
+//
+//	8h CO2 700-1300                    42%
+//	      #       #
+//	  # # # ##  # ###
+func RenderSparklineCO2(display drivers.Displayer, r *types.Readings) {
 	data := r.History.CO2.Contiguous()
 	title := "CO2"
 	baseline := int16(1000)
 
-	renderSparkline(renderer, title, data, baseline)
+	renderSparkline(display, title, data, baseline)
 }
 
-func RenderSparklineT(renderer Renderer, r *types.Readings) {
+// RenderSparklineT draws eight hours of temperature history against 27 C.
+//
+//	8h T 23-29                         35%
+//	      #       #
+//	  # # # ##  # ###
+func RenderSparklineT(display drivers.Displayer, r *types.Readings) {
 	data := r.History.Temperature.Contiguous()
 	title := "T"
 	baseline := int16(27)
 
-	renderSparkline(renderer, title, data, baseline)
+	renderSparkline(display, title, data, baseline)
 }
 
-func RenderSparklineRH(renderer Renderer, r *types.Readings) {
+// RenderSparklineRH draws eight hours of humidity history against 45% RH.
+//
+//	8h RH 40-65                        58%
+//	      #       #
+//	  # # # ##  # ###
+func RenderSparklineRH(display drivers.Displayer, r *types.Readings) {
 	data := r.History.Humidity.Contiguous()
 	title := "RH"
 	baseline := int16(45)
 
-	renderSparkline(renderer, title, data, baseline)
-}
-
-func RenderSparklineHI(renderer Renderer, r *types.Readings) {
-	data := r.History.HeatIndexTemp.Contiguous()
-	title := "HI"
-	baseline := int16(27)
-
-	renderSparkline(renderer, title, data, baseline)
-}
-
-func RenderSparklineDP(renderer Renderer, r *types.Readings) {
-	data := r.History.DewPoint.Contiguous()
-	title := "DP"
-	baseline := int16(18)
-
-	renderSparkline(renderer, title, data, baseline)
+	renderSparkline(display, title, data, baseline)
 }
 
 func renderSparkline(
-	renderer Renderer,
+	display drivers.Displayer,
 	title string,
 	data []int16,
 	baseline int16,
 ) {
-	if renderer == nil {
+	if display == nil {
 		return
 	}
 
-	renderer.Clear()
+	widget.Clear(display)
 
 	var (
 		y  int16
 		x  int16
-		sf = renderer.GetFont(font.ProggySZ8)
+		sf = font.New(display, font.ProggySZ8)
 	)
 	minV, maxV := minMaxInt16Slice(data)
 	percentAbove := calcPercentAboveBaseline(data, baseline)
@@ -70,8 +73,7 @@ func renderSparkline(
 	sf.Print(0, 0, titleStr)
 
 	sparklineTitle := fmt.Sprintf("%.0f%%", percentAbove)
-	width, _ := renderer.Size()
-	sf.Print(width-sf.CalcWidth(sparklineTitle), 0, sparklineTitle)
+	layout.Right(display, sf, 0, sparklineTitle)
 
 	x = 0
 	y = 11
@@ -81,8 +83,8 @@ func renderSparkline(
 		graphWidth  int16 = 128
 	)
 
-	renderer.DrawSparkline(x, y, data, graphWidth, graphHeight)
-	renderer.Display()
+	widget.Sparkline(display, x, y, graphWidth, graphHeight, data)
+	display.Display()
 }
 
 func minMaxInt16Slice(data []int16) (minV int16, maxV int16) {
@@ -102,7 +104,6 @@ func minMaxInt16Slice(data []int16) (minV int16, maxV int16) {
 	return minV, maxV
 }
 
-// calculate percent above baseline in slice of int16
 func calcPercentAboveBaseline(data []int16, baseline int16) float32 {
 	if len(data) == 0 {
 		return 0

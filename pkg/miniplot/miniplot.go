@@ -1,3 +1,4 @@
+// Package miniplot draws a compact auto-scrolling line chart.
 package miniplot
 
 import (
@@ -10,6 +11,7 @@ import (
 	"tinygo.org/x/tinyfont"
 )
 
+// MiniPlot holds the display and text metrics used by a line chart.
 type MiniPlot struct {
 	display       drivers.Displayer
 	font          tinyfont.Fonter
@@ -20,28 +22,9 @@ type MiniPlot struct {
 	Color         color.RGBA
 	StartX        int16 // X position to start drawing the plot
 	StartY        int16 // Y position to start drawing the plot
-	AutoScale     bool  // Whether to automatically scale the Y-axis
 }
 
-type Drawer interface {
-	Line(display drivers.Displayer, x0 int16, y0 int16, x1 int16, y1 int16, color color.RGBA)
-	Rectangle(display drivers.Displayer, x int16, y int16, w int16, h int16, color color.RGBA) error
-	FilledRectangle(display drivers.Displayer, x int16, y int16, w int16, h int16, color color.RGBA) error
-	Circle(display drivers.Displayer, x0 int16, y0 int16, r int16, color color.RGBA)
-	FilledCircle(display drivers.Displayer, x0 int16, y0 int16, r int16, color color.RGBA)
-	Triangle(display drivers.Displayer, x0 int16, y0 int16, x1 int16, y1 int16, x2 int16, y2 int16, color color.RGBA)
-	FilledTriangle(display drivers.Displayer, x0 int16, y0 int16, x1 int16, y1 int16, x2 int16, y2 int16, color color.RGBA)
-}
-
-type Plotter interface {
-	// DrawLineChart draws a line chart on the display from the provided data.
-	// Plot automatically adjusts height to fit the display.
-	// If length of data is less than the display width, it will fill the rest
-	// with zeros. Drawing will start from right to left.
-	// If the data is longer than the display width, it will be truncated.
-	DrawLineChart([]int) error
-}
-
+// NewMiniPlot constructs a chart for the supplied display dimensions.
 func NewMiniPlot(
 	display drivers.Displayer,
 	font tinyfont.Fonter,
@@ -74,6 +57,12 @@ func NewMiniPlot(
 	}, nil
 }
 
+// DrawLineChart draws a title, extrema, time axis, and right-aligned samples.
+//
+//	title  max
+//	       /\    /\
+//	min __/  \__/  \____
+//	-8h      -1h    now
 func (mp *MiniPlot) DrawLineChart(
 	data []int16,
 	title string,
@@ -87,7 +76,6 @@ func (mp *MiniPlot) DrawLineChart(
 		data = data[len(data)-int(mp.DisplayWidth-mp.StartX-2):]
 	}
 
-	// Find min and max values for scaling
 	minVal := data[0]
 	maxVal := data[0]
 	for _, v := range data {
@@ -99,13 +87,8 @@ func (mp *MiniPlot) DrawLineChart(
 		}
 	}
 
-	// Clear display area
 	tinydraw.FilledRectangle(mp.display, 0, 0, mp.DisplayWidth, mp.DisplayHeight, color.RGBA{0, 0, 0, 255})
-
-	// Draw axes
 	mp.drawAxis(maxVal, minVal, title)
-
-	// Draw data
 	mp.drawData(data, minVal, maxVal)
 
 	return nil
@@ -122,29 +105,15 @@ func (mp *MiniPlot) drawAxis(
 	startX := mp.StartX // Start X position for the axis
 	startY := mp.StartY // Start Y position for the axis
 
-	// Draw Y-axis line
 	tinydraw.Line(mp.display, startX, startY, startX, 0, mp.Color)
-
-	// Draw X-axis line
 	tinydraw.Line(mp.display, startX, startY, mp.DisplayWidth-1, startY, mp.Color)
-
-	// Draw Y-axis labels
-	rangeVal := maxValue - minValue
-	if rangeVal == 0 {
-		rangeVal = 1
-	}
-
-	// Title in left bottom corner
 	mp.drawText(1, startY+mp.fontHeight, title)
-
-	// Y-axis labels
 	label := mp.formatValue(minValue)
 	mp.drawText(1, startY, label)
 
 	label = mp.formatValue(maxValue)
 	mp.drawText(1, mp.fontHeight, label)
 
-	// X-axis labels
 	text := "0h"
 	textWidth := int16(len(text)) * mp.fontWidth
 	halfTextWidth := textWidth / 2
@@ -156,11 +125,6 @@ func (mp *MiniPlot) drawAxis(
 	halfTextWidth = textWidth / 2
 	xPos = mp.DisplayWidth - int16(60) - halfTextWidth
 	mp.drawText(xPos, startY+mp.fontHeight, text)
-}
-
-// drawGrid draws a grid on the plot.
-// It should draw horizontal lines with space for each 25% of the Y-axis,
-func (mp *MiniPlot) drawGrid() {
 }
 
 // drawData draws an auto-scrolling line chart that grows from the right edge.

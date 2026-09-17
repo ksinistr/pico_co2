@@ -10,9 +10,9 @@ import (
 
 func TestCanEnter(t *testing.T) {
 	tests := []struct {
-		name          string
-		onTimeScreen  bool
-		wantCanEnter  bool
+		name         string
+		onTimeScreen bool
+		wantCanEnter bool
 	}{
 		{"on time screen", true, true},
 		{"on other screen", false, false},
@@ -41,9 +41,9 @@ func TestEnterPreloadsTime(t *testing.T) {
 
 func TestMoveBetweenFields(t *testing.T) {
 	tests := []struct {
-		name     string
-		from     EditField
-		presses  int
+		name      string
+		from      EditField
+		presses   int
 		wantField EditField
 	}{
 		{"hour to minute", FieldHour, 1, FieldMinute},

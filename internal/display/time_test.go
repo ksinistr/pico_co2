@@ -3,7 +3,7 @@ package display
 import (
 	"testing"
 
-	"pico_co2/internal/types"
+	"pico_co2/internal/clockedit"
 )
 
 func TestFormatTime(t *testing.T) {
@@ -31,23 +31,23 @@ func TestFormatTime(t *testing.T) {
 func TestFormatEditTime(t *testing.T) {
 	tests := []struct {
 		name   string
-		field  int
+		field  clockedit.EditField
 		hour   int
 		minute int
 		want   string
 	}{
-		{"hour field", types.EditFieldHour, 14, 23, "[14]:23"},
-		{"minute field", types.EditFieldMinute, 14, 23, "14:[23]"},
-		{"save field", types.EditFieldSave, 14, 23, "[SAVE] EXIT"},
-		{"cancel field", types.EditFieldCancel, 14, 23, "SAVE [EXIT]"},
-		{"single digit hour", types.EditFieldHour, 9, 5, "[9]:05"},
-		{"single digit minute", types.EditFieldMinute, 9, 5, "9:[05]"},
-		{"midnight hour", types.EditFieldHour, 0, 0, "[0]:00"},
-		{"midnight minute", types.EditFieldMinute, 0, 0, "0:[00]"},
-		{"max values hour", types.EditFieldHour, 23, 59, "[23]:59"},
-		{"max values minute", types.EditFieldMinute, 23, 59, "23:[59]"},
-		{"save ignores time", types.EditFieldSave, 23, 59, "[SAVE] EXIT"},
-		{"cancel ignores time", types.EditFieldCancel, 0, 0, "SAVE [EXIT]"},
+		{"hour field", clockedit.FieldHour, 14, 23, "[14]:23"},
+		{"minute field", clockedit.FieldMinute, 14, 23, "14:[23]"},
+		{"save field", clockedit.FieldSave, 14, 23, "[SAVE] EXIT"},
+		{"cancel field", clockedit.FieldCancel, 14, 23, "SAVE [EXIT]"},
+		{"single digit hour", clockedit.FieldHour, 9, 5, "[9]:05"},
+		{"single digit minute", clockedit.FieldMinute, 9, 5, "9:[05]"},
+		{"midnight hour", clockedit.FieldHour, 0, 0, "[0]:00"},
+		{"midnight minute", clockedit.FieldMinute, 0, 0, "0:[00]"},
+		{"max values hour", clockedit.FieldHour, 23, 59, "[23]:59"},
+		{"max values minute", clockedit.FieldMinute, 23, 59, "23:[59]"},
+		{"save ignores time", clockedit.FieldSave, 23, 59, "[SAVE] EXIT"},
+		{"cancel ignores time", clockedit.FieldCancel, 0, 0, "SAVE [EXIT]"},
 		{"unknown field falls back to normal", 99, 14, 23, "14:23"},
 	}
 	for _, tt := range tests {

@@ -1,7 +1,5 @@
 package status
 
-import "encoding/json"
-
 // https://en.wikipedia.org/wiki/Heat_index#Formula
 func HeatIndexVal(tempC, rh float32) float32 {
 	if tempC < 27.0 {
@@ -77,8 +75,4 @@ func (h HeatIndex) String() string {
 		return "Unknown Heat Index"
 	}
 	return HeatIndexStatusStrings[h]
-}
-
-func (h HeatIndex) MarshalJSON() ([]byte, error) {
-	return json.Marshal(h.String())
 }
