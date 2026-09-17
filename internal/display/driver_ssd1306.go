@@ -246,6 +246,21 @@ func (v *SSD1306Adapter) DrawSparkline(
 	}
 }
 
+func (v *SSD1306Adapter) colorFor(on bool) color.RGBA {
+	if on {
+		return v.white
+	}
+	return v.black
+}
+
+func (v *SSD1306Adapter) FillRect(x, y, w, h int16, on bool) {
+	tinydraw.FilledRectangle(v, x, y, w, h, v.colorFor(on))
+}
+
+func (v *SSD1306Adapter) FillTriangle(x0, y0, x1, y1, x2, y2 int16, on bool) {
+	tinydraw.FilledTriangle(v, x0, y0, x1, y1, x2, y2, v.colorFor(on))
+}
+
 func (v *SSD1306Adapter) DrawSquareBar(x, y int16, value uint8) {
 	if value == 0 {
 		return

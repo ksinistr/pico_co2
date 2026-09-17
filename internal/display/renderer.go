@@ -26,6 +26,11 @@ type Renderer interface {
 	)
 	DrawSquareBar(x, y int16, value uint8)
 
+	// Primitives. `on` selects the foreground colour, so callers stay free of
+	// display colour details.
+	FillRect(x, y, w, h int16, on bool)
+	FillTriangle(x0, y0, x1, y1, x2, y2 int16, on bool)
+
 	// NEW: Unified font management methods
 	GetFont(fontType font.FontType) font.FontPrinter
 	DrawText(fontType font.FontType, x, y int16, text string)

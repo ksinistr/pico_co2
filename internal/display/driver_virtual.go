@@ -304,6 +304,21 @@ func (v *VirtualDisplay) DrawSparkline(
 	}
 }
 
+func (v *VirtualDisplay) colorFor(on bool) color.RGBA {
+	if on {
+		return v.white
+	}
+	return v.black
+}
+
+func (v *VirtualDisplay) FillRect(x, y, w, h int16, on bool) {
+	tinydraw.FilledRectangle(v, x, y, w, h, v.colorFor(on))
+}
+
+func (v *VirtualDisplay) FillTriangle(x0, y0, x1, y1, x2, y2 int16, on bool) {
+	tinydraw.FilledTriangle(v, x0, y0, x1, y1, x2, y2, v.colorFor(on))
+}
+
 func (v *VirtualDisplay) DrawSquareBar(x, y int16, value uint8) {
 	if value == 0 {
 		return

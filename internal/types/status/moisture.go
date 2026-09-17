@@ -13,10 +13,13 @@ func DewPointC(tempC, rh float32) float32 {
 }
 
 func AbsoluteHumidityGM3(tempC, rh float32) float32 {
-	clampedRH := clampRH(rh)
-	svpHPA := 6.112 * math.Exp((17.62*float64(tempC))/(243.12+float64(tempC)))
-	vaporPressure := svpHPA * float64(clampedRH) / 100.0
+	vaporPressure := float64(VaporPressureHPA(tempC, rh))
 	return float32(216.7 * vaporPressure / (273.15 + float64(tempC)))
+}
+
+func VaporPressureHPA(tempC, rh float32) float32 {
+	svpHPA := 6.112 * math.Exp((17.62*float64(tempC))/(243.12+float64(tempC)))
+	return float32(svpHPA * float64(clampRH(rh)) / 100.0)
 }
 
 func clampRH(rh float32) float32 {

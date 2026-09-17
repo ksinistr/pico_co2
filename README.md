@@ -79,6 +79,29 @@ Below are examples of the different display themes available:
 
 ![CO2 Graph Display](images/RenderSparklineCO2-normal.png)
 
+### Sleep Scale Display
+
+CO2 and temperature at the same size, humidity and the thermal zone on the top strip. The bar
+along the bottom edge is empty while the room is fine and grows past the comfort boundary once
+it is not - see [docs/thermal-index.md](docs/thermal-index.md).
+
+![Sleep Scale Display](images/RenderSleepScale-normal.png)
+
+### Three Values With Trend
+
+![Three Values With Trend](images/RenderBarsWithTrend-normal.png)
+
+## Background research
+
+Why the displayed numbers and thresholds are what they are, with sources:
+
+- [docs/thermal-index.md](docs/thermal-index.md) - why the NWS heat index is unusable below
+  27 °C, the Steadman apparent temperature used instead, and how the sleep thresholds map onto
+  its scale.
+- [docs/sleep-bedding.md](docs/sleep-bedding.md) - what "comfort up to 29 °C" requires in
+  practice: bedding insulation in clo and tog, coverage, airflow, and how to run an air
+  conditioned room whose doors have to stay shut.
+
 ## Case
 
 ![20250714_065327_](https://github.com/user-attachments/assets/1119b4b1-9fd0-45b7-aa6f-d544de5fbf7b)
