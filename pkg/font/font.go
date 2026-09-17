@@ -14,9 +14,11 @@ import (
 	"tinygo.org/x/tinyfont"
 	"tinygo.org/x/tinyfont/freemono"
 	"tinygo.org/x/tinyfont/freesans"
+	"tinygo.org/x/tinyfont/freeserif"
 	"tinygo.org/x/tinyfont/notoemoji"
 	"tinygo.org/x/tinyfont/notosans"
 	"tinygo.org/x/tinyfont/proggy"
+	"tinygo.org/x/tinyfont/shnm"
 )
 
 // FontType identifies one of the bitmap fonts compiled into the program.
@@ -29,11 +31,17 @@ const (
 	FreemonoBold12
 	FreemonoRegular9
 	FreemonoBold9
+	FreesansRegular18
+	FreesansBold18
 	FreesansRegular12
 	FreesansBold12
 	FreesansRegular9
 	FreesansBold9
+	FreeserifRegular12
+	FreeserifBold12
 	ProggySZ8
+	TomThumb
+	Shnmk12
 	Notoemoji
 	Notosans
 )
@@ -112,6 +120,10 @@ func source(typ FontType) tinyfont.Fonter {
 		return &freemono.Regular9pt7b
 	case FreemonoBold9:
 		return &freemono.Bold9pt7b
+	case FreesansRegular18:
+		return &freesans.Regular18pt7b
+	case FreesansBold18:
+		return &freesans.Bold18pt7b
 	case FreesansRegular12:
 		return &freesans.Regular12pt7b
 	case FreesansBold12:
@@ -120,6 +132,14 @@ func source(typ FontType) tinyfont.Fonter {
 		return &freesans.Regular9pt7b
 	case FreesansBold9:
 		return &freesans.Bold9pt7b
+	case FreeserifRegular12:
+		return &freeserif.Regular12pt7b
+	case FreeserifBold12:
+		return &freeserif.Bold12pt7b
+	case Shnmk12:
+		return &shnm.Shnmk12
+	case TomThumb:
+		return &tinyfont.TomThumb
 	case Notoemoji:
 		return &notoemoji.NotoEmojiRegular16pt
 	case Notosans:

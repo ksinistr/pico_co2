@@ -163,6 +163,51 @@ func ThermalScale(display drivers.Displayer, y, height int16, value float32, sca
 	tinydraw.FilledRectangle(display, hotX, y, 1, height, white)
 }
 
+// Gauge draws a proportional horizontal fill over a baseline track. Values
+// outside min..max are clamped to the ends.
+//
+//	min          value                    max
+//	 |###############|______________________|
+//	 x                                 x+width
+func Gauge(display drivers.Displayer, x, y, width, height int16, value, min, max float32) {
+	if display == nil || width <= 0 || height <= 0 {
+		return
+	}
+	tinydraw.FilledRectangle(display, x, y+height-1, width, 1, white)
+	filled := ScaleX(width, value, min, max)
+	if filled <= 0 {
+		return
+	}
+	tinydraw.FilledRectangle(display, x, y, filled, height, white)
+}
+
+func GaugeBordered(display drivers.Displayer, x, y, width, height int16, value, min, max float32) {
+	if display == nil || width <= 0 || height <= 0 {
+		return
+	}
+	tinydraw.Rectangle(display, x, y, width, height, white)
+	filled := ScaleX(width, value, min, max)
+	if filled <= 0 {
+		return
+	}
+	tinydraw.FilledRectangle(display, x, y, filled, height, white)
+}
+
+// GaugeMark draws a threshold divider inside a Gauge: a black gap keeps it
+// visible once the fill passes it.
+//
+//	|#########|#|__________|
+//	          ^
+//	        value
+func GaugeMark(display drivers.Displayer, x, y, width, height int16, value, min, max float32) {
+	if display == nil || width <= 0 || height <= 0 {
+		return
+	}
+	markX := x + ScaleX(width, value, min, max)
+	tinydraw.FilledRectangle(display, markX-1, y, 1, height, black)
+	tinydraw.FilledRectangle(display, markX, y, 1, height, white)
+}
+
 // Sparkline draws one bottom-aligned vertical bar per sample. If data is wider
 // than the available area, only the newest values are shown.
 //
