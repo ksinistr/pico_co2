@@ -1,3 +1,8 @@
+// Package layout positions text and values on a pixel display.
+//
+//	left                 centered                 right
+//	|text                   text                   text|
+//	0                                                width
 package layout
 
 import (
@@ -7,8 +12,11 @@ import (
 	"tinygo.org/x/drivers"
 )
 
-func Left(face font.Face, x, y int16, text string) int16 { return face.Print(x, y, text) }
-
+// Center draws text centered across the display and returns its left edge.
+//
+//	|--------------- text ---------------|
+//	                ^
+//	              result
 func Center(display drivers.Displayer, face font.Face, y int16, text string) int16 {
 	width, _ := display.Size()
 	x := (width - face.Width(text)) / 2
@@ -16,6 +24,11 @@ func Center(display drivers.Displayer, face font.Face, y int16, text string) int
 	return x
 }
 
+// Right draws text against the right display edge and returns its left edge.
+//
+//	|------------------------------- text|
+//	                                ^
+//	                              result
 func Right(display drivers.Displayer, face font.Face, y int16, text string) int16 {
 	width, _ := display.Size()
 	x := width - face.Width(text)
@@ -23,42 +36,134 @@ func Right(display drivers.Displayer, face font.Face, y int16, text string) int1
 	return x
 }
 
+// Three draws three strings with equal gaps and returns their left edges.
+//
+//	|left          middle           right|
+//	^             ^                ^
 func Three(display drivers.Displayer, face font.Face, y int16, left, middle, right string) (int16, int16, int16) {
+	positions := Row(display, y,
+		Cell{Face: face, Text: left},
+		Cell{Face: face, Text: middle},
+		Cell{Face: face, Text: right},
+	)
+	return positions[0], positions[1], positions[2]
+}
+
+// Cell is one value in a Row. Unit is drawn five pixels below Text. YOffset
+// preserves intentional baseline differences between mixed font sizes.
+//
+//	Text unit
+//	^    ^
+//	y+Y  y+Y+5
+type Cell struct {
+	Face     font.Face
+	Text     string
+	Unit     string
+	UnitFace font.Face
+	YOffset  int16
+}
+
+// Row distributes cells across the full display with equal gaps. It returns
+// the left edge of every cell.
+//
+//	|24 c          55 %             1200|
+//	^              ^                ^
+//	positions[0]   positions[1]     positions[2]
+func Row(display drivers.Displayer, y int16, cells ...Cell) []int16 {
+	if len(cells) == 0 {
+		return nil
+	}
 	width, _ := display.Size()
-	leftX := int16(0)
-	rightX := width - face.Width(right)
-	middleX := face.Width(left) + (width-face.Width(left)-face.Width(middle)-face.Width(right))/2
-	face.Print(leftX, y, left)
-	face.Print(middleX, y, middle)
-	face.Print(rightX, y, right)
-	return leftX, middleX, rightX
+	positions := make([]int16, len(cells))
+	used := int16(0)
+	for _, cell := range cells {
+		used += cellWidth(cell)
+	}
+	gap := int16(0)
+	if len(cells) > 1 {
+		gap = (width - used) / int16(len(cells)-1)
+	}
+
+	x := int16(0)
+	for i, cell := range cells {
+		positions[i] = x
+		drawCell(cell, x, y)
+		x += cellWidth(cell) + gap
+	}
+	return positions
 }
 
-func NumberWithUnit(number, unit font.Face, x, y int16, value, suffix string) int16 {
-	number.Print(x, y, value)
-	unitX := x + number.Width(value) + 1
-	unit.Print(unitX, y+5, suffix)
-	return unitX + unit.Width(suffix)
-}
-
+// Wrap splits text at spaces and, when needed, splits words to fit width.
+//
+//	"sensor timeout while reading"
+//	+--------------+
+//	|sensor timeout|
+//	|while reading |
+//	+--------------+
 func Wrap(text string, face font.Face, width int16) []string {
 	words := strings.Fields(text)
 	if len(words) == 0 {
 		return nil
 	}
-	lines := []string{words[0]}
-	for _, word := range words[1:] {
-		last := len(lines) - 1
-		candidate := lines[last] + " " + word
-		if face.Width(candidate) > width {
-			lines = append(lines, word)
-			continue
+	lines := make([]string, 0, len(words))
+	for _, word := range words {
+		parts := splitWord(word, face, width)
+		for _, part := range parts {
+			if len(lines) == 0 {
+				lines = append(lines, part)
+				continue
+			}
+			last := len(lines) - 1
+			candidate := lines[last] + " " + part
+			if face.Width(candidate) > width {
+				lines = append(lines, part)
+				continue
+			}
+			lines[last] = candidate
 		}
-		lines[last] = candidate
 	}
 	return lines
 }
 
+func cellWidth(cell Cell) int16 {
+	width := cell.Face.Width(cell.Text)
+	if cell.Unit != "" {
+		width += 1 + cell.UnitFace.Width(cell.Unit)
+	}
+	return width
+}
+
+func drawCell(cell Cell, x, y int16) {
+	y += cell.YOffset
+	cell.Face.Print(x, y, cell.Text)
+	if cell.Unit != "" {
+		cell.UnitFace.Print(x+cell.Face.Width(cell.Text)+1, y+5, cell.Unit)
+	}
+}
+
+func splitWord(word string, face font.Face, width int16) []string {
+	if width <= 0 || face.Width(word) <= width {
+		return []string{word}
+	}
+	parts := make([]string, 0, len(word))
+	for len(word) > 0 {
+		end := 1
+		for end < len(word) && face.Width(word[:end+1]) <= width {
+			end++
+		}
+		parts = append(parts, word[:end])
+		word = word[end:]
+	}
+	return parts
+}
+
+// LongText draws wrapped lines from (x,y) and clips complete lines below the
+// display. Text wider than one line follows the same shape as Wrap.
+//
+//	(x,y) +----------------+
+//	      |sensor timeout  |
+//	      |while reading   |
+//	      +----------------+
 func LongText(display drivers.Displayer, face font.Face, x, y int16, text string) {
 	width, height := display.Size()
 	lineHeight := face.Height() + 1
@@ -67,6 +172,6 @@ func LongText(display drivers.Displayer, face font.Face, x, y int16, text string
 		if i >= maxLines {
 			return
 		}
-		face.Print(x, y+face.Height()+int16(i)*lineHeight, line)
+		face.Print(x, y+int16(i)*lineHeight, line)
 	}
 }

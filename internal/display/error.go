@@ -8,6 +8,11 @@ import (
 	"tinygo.org/x/drivers"
 )
 
+// RenderError fills the screen with a wrapped error message.
+//
+//	scd4x read: i2c
+//	timeout while
+//	reading sensor
 func RenderError(display drivers.Displayer, r *types.Readings) {
 	if display == nil {
 		return

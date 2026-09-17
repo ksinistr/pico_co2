@@ -1,7 +1,6 @@
 package types
 
 import (
-	"math"
 	"testing"
 	"time"
 
@@ -48,27 +47,38 @@ func TestCO2TrendCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := InitReadings(128)
-
-			// Add readings one by one to simulate real usage
+			r := InitReadings(128, time.Minute)
+			start := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 			for i, co2 := range tt.readings {
-				// Manually advance time first to bypass the granularity check
-				if i > 0 {
-					r.History.AddedAt = r.History.AddedAt.Add(-time.Duration(i) * time.Minute)
-				}
-				r.AddReadings(co2, 22.0, 50.0)
+				r.AddReadingsAt(start.Add(time.Duration(i)*time.Minute), co2, 22.0, 50.0)
 			}
 
-			// Check the trend
 			if r.Calculated.CO2Trend != tt.expectedTrend {
 				t.Errorf("Expected trend %v, got %v", tt.expectedTrend, r.Calculated.CO2Trend)
 			}
 
-			// Print debug info for failed tests
-			if r.Calculated.CO2Trend != tt.expectedTrend {
-				t.Logf("Debug info - Previous avg: %d, Current avg: %d, Diff: %d",
-					r.Calculated.CO25MinAvgPrev, r.Calculated.CO25MinAvgCurr,
-					int32(r.Calculated.CO25MinAvgCurr)-int32(r.Calculated.CO25MinAvgPrev))
+		})
+	}
+}
+
+func TestHistoryRecordsAtIntervalBoundary(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		offsets []time.Duration
+		want    int
+	}{
+		{"before boundary", []time.Duration{0, 59 * time.Second}, 1},
+		{"at boundary", []time.Duration{0, time.Minute}, 2},
+		{"multiple intervals", []time.Duration{0, time.Minute, 2 * time.Minute}, 3},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			readings := InitReadings(8, time.Minute)
+			start := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+			for _, offset := range tt.offsets {
+				readings.AddReadingsAt(start.Add(offset), 800, 24, 50)
+			}
+			if got := readings.History.CO2.Len(); got != tt.want {
+				t.Fatalf("history length = %d, want %d", got, tt.want)
 			}
 		})
 	}
@@ -92,33 +102,5 @@ func TestCO2TrendString(t *testing.T) {
 				t.Errorf("Expected %s, got %s", tt.expected, tt.trend.String())
 			}
 		})
-	}
-}
-
-func TestAddReadingsCalculatesMoisture(t *testing.T) {
-	r := InitReadings(128)
-
-	r.AddReadings(900, 24.0, 90.0)
-
-	if math.Abs(float64(r.Calculated.DewPointC-22.3)) > 0.2 {
-		t.Fatalf("DewPointC = %.2f, want around 22.3", r.Calculated.DewPointC)
-	}
-	if math.Abs(float64(r.Calculated.AbsoluteHumidityGM3-19.6)) > 0.2 {
-		t.Fatalf("AbsoluteHumidityGM3 = %.2f, want around 19.6", r.Calculated.AbsoluteHumidityGM3)
-	}
-}
-
-func TestAddReadingsStoresDewPointHistory(t *testing.T) {
-	r := InitReadings(128)
-	r.History.AddedAt = time.Now().Add(-2 * time.Minute)
-
-	r.AddReadings(900, 24.0, 90.0)
-
-	data := r.History.DewPoint.Contiguous()
-	if len(data) != 1 {
-		t.Fatalf("dew point history len = %d, want 1", len(data))
-	}
-	if data[0] != 22 {
-		t.Fatalf("dew point history value = %d, want 22", data[0])
 	}
 }

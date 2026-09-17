@@ -3,6 +3,8 @@ package display
 import (
 	"fmt"
 	"math"
+
+	"pico_co2/internal/clockedit"
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
@@ -19,21 +21,26 @@ func FormatTime(hour, minute int) string {
 // FormatEditTime returns the display string for clock edit mode.
 // The selected field is indicated by square brackets for numeric fields
 // or by the action label for save/cancel fields.
-func FormatEditTime(field int, hour, minute int) string {
+func FormatEditTime(field clockedit.EditField, hour, minute int) string {
 	switch field {
-	case types.EditFieldHour:
+	case clockedit.FieldHour:
 		return fmt.Sprintf("[%d]:%02d", hour, minute)
-	case types.EditFieldMinute:
+	case clockedit.FieldMinute:
 		return fmt.Sprintf("%d:[%02d]", hour, minute)
-	case types.EditFieldSave:
+	case clockedit.FieldSave:
 		return "[SAVE] EXIT"
-	case types.EditFieldCancel:
+	case clockedit.FieldCancel:
 		return "SAVE [EXIT]"
 	default:
 		return FormatTime(hour, minute)
 	}
 }
 
+// RenderTime draws the main status screen and the clock editor.
+//
+//	H O .       26  55             C O O
+//	              14:23
+//	             T O .
 func RenderTime(display drivers.Displayer, r *types.Readings) {
 	if display == nil {
 		return

@@ -2,6 +2,7 @@ package display
 
 import (
 	"fmt"
+
 	"pico_co2/internal/types"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
@@ -9,6 +10,11 @@ import (
 	"tinygo.org/x/drivers"
 )
 
+// RenderSparklineCO2 draws eight hours of CO2 history against 1000 ppm.
+//
+//	8h CO2 700-1300                    42%
+//	      #       #
+//	  # # # ##  # ###
 func RenderSparklineCO2(display drivers.Displayer, r *types.Readings) {
 	data := r.History.CO2.Contiguous()
 	title := "CO2"
@@ -17,6 +23,11 @@ func RenderSparklineCO2(display drivers.Displayer, r *types.Readings) {
 	renderSparkline(display, title, data, baseline)
 }
 
+// RenderSparklineT draws eight hours of temperature history against 27 C.
+//
+//	8h T 23-29                         35%
+//	      #       #
+//	  # # # ##  # ###
 func RenderSparklineT(display drivers.Displayer, r *types.Readings) {
 	data := r.History.Temperature.Contiguous()
 	title := "T"
@@ -25,6 +36,11 @@ func RenderSparklineT(display drivers.Displayer, r *types.Readings) {
 	renderSparkline(display, title, data, baseline)
 }
 
+// RenderSparklineRH draws eight hours of humidity history against 45% RH.
+//
+//	8h RH 40-65                        58%
+//	      #       #
+//	  # # # ##  # ###
 func RenderSparklineRH(display drivers.Displayer, r *types.Readings) {
 	data := r.History.Humidity.Contiguous()
 	title := "RH"
@@ -88,7 +104,6 @@ func minMaxInt16Slice(data []int16) (minV int16, maxV int16) {
 	return minV, maxV
 }
 
-// calculate percent above baseline in slice of int16
 func calcPercentAboveBaseline(data []int16, baseline int16) float32 {
 	if len(data) == 0 {
 		return 0

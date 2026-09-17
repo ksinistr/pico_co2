@@ -1,10 +1,23 @@
 package status
 
+import "math"
+
 // Steadman apparent temperature without the wind term. Unlike the heat index in
 // heatindex.go it stays defined below 27C, which is the range an air
 // conditioned bedroom lives in. See docs/thermal-index.md.
 func ApparentTempC(tempC, rh float32) float32 {
 	return tempC + 0.33*VaporPressureHPA(tempC, rh) - 4
+}
+
+func VaporPressureHPA(tempC, rh float32) float32 {
+	if rh < 1 {
+		rh = 1
+	}
+	if rh > 100 {
+		rh = 100
+	}
+	svpHPA := 6.112 * math.Exp((17.62*float64(tempC))/(243.12+float64(tempC)))
+	return float32(svpHPA * float64(rh) / 100)
 }
 
 // Thresholds are apparent temperatures, converted from the dry-bulb values the

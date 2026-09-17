@@ -3,9 +3,9 @@
 //
 // User flow (code-level specification):
 //
-//  1. Entry: clock setup can only be entered from the time screen (the first
-//     display in the registry). The user must press both touch buttons within
-//     a ~400 ms window. Any narrower or wider combination is ignored.
+//  1. Entry: clock setup can only be entered from the time screen. The user
+//     must press both touch buttons within a ~400 ms window. Any narrower or
+//     wider combination is ignored.
 //
 //  2. Editing: once active, normal left/right display navigation is disabled.
 //     - Left button cycles the cursor: hour -> minute -> save -> cancel -> hour
@@ -29,7 +29,7 @@ package clockedit
 type EditField int
 
 const (
-	FieldHour   EditField = iota
+	FieldHour EditField = iota
 	FieldMinute
 	FieldSave
 	FieldCancel
@@ -40,9 +40,9 @@ type Action int
 
 const (
 	ActionNone  Action = iota // no button event
-	ActionLeft                 // left button pressed: cycle selected field
-	ActionRight                // right button pressed: increment or activate
-	ActionBoth                 // both buttons pressed: toggle editor
+	ActionLeft                // left button pressed: cycle selected field
+	ActionRight               // right button pressed: increment or activate
+	ActionBoth                // both buttons pressed: toggle editor
 )
 
 // EditorState holds the pending clock values and cursor position.

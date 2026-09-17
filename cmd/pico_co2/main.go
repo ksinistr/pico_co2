@@ -8,16 +8,13 @@ import (
 	"pico_co2/internal/button"
 	"pico_co2/internal/display"
 	"pico_co2/internal/sensors"
+	"pico_co2/internal/types"
 	"tinygo.org/x/drivers/ds3231"
 	"tinygo.org/x/drivers/ssd1306"
 )
 
 const (
-	queueCapacity       = 480
-	loopInterval        = 50 * time.Millisecond
-	timeReadInterval    = time.Second
-	startupReadInterval = time.Second
-	sensorReadInterval  = time.Minute
+	loopInterval = 50 * time.Millisecond
 )
 
 func main() {
@@ -50,26 +47,22 @@ func main() {
 
 	left := button.NewTouchButton(machine.GP10)
 	right := button.NewTouchButton(machine.GP11)
-	state := app.NewState(queueCapacity)
-	deps := app.Dependencies{
-		Display:                &device,
-		Screens:                display.ActiveScreens(),
-		RTC:                    &clock,
-		Read:                   reader.Read,
-		LeftPressed:            left.Consume,
-		RightPressed:           right.Consume,
-		TimeReadInterval:       timeReadInterval,
-		StartupReadInterval:    startupReadInterval,
-		SensorReadInterval:     sensorReadInterval,
-		SimultaneousPressDelay: 400 * time.Millisecond,
-	}
+	monitor := app.New(app.Deps{
+		Display:      &device,
+		Screens:      display.ActiveScreens(),
+		RTC:          &clock,
+		Read:         reader.Read,
+		LeftPressed:  left.Consume,
+		RightPressed: right.Consume,
+		Schedule:     app.DefaultSchedule(),
+	}, types.DefaultHistoryCapacity)
 
 	watchdog := machine.Watchdog
 	watchdog.Configure(machine.WatchdogConfig{TimeoutMillis: machine.WatchdogMaxTimeout})
 	watchdog.Start()
 	for {
 		watchdog.Update()
-		state.Step(deps, time.Now())
+		monitor.Tick(time.Now())
 		time.Sleep(loopInterval)
 	}
 }

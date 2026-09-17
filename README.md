@@ -30,7 +30,7 @@ Clock setup allows setting the DS3231 real-time clock on-device using the two to
 
 **Entering clock setup**
 
-1. Navigate to the time screen (first display)
+1. Navigate to the time screen
 2. Press both buttons within a ~400 ms window
 3. The display switches to edit mode, showing the current hour in brackets
 
@@ -75,11 +75,11 @@ Below are examples of the different display themes available:
 
 ### Main Display
 
-![Main Display](images/RenderTime-normal.png)
+![Main Display](images/time-normal.png)
 
 ### CO2 Graph Display
 
-![CO2 Graph Display](images/RenderSparklineCO2-normal.png)
+![CO2 Graph Display](images/sparkline-co2-normal.png)
 
 ### Sleep Scale Display
 
@@ -87,11 +87,11 @@ CO2 and temperature at the same size, humidity and the thermal zone on the top s
 along the bottom edge is empty while the room is fine and grows past the comfort boundary once
 it is not - see [docs/thermal-index.md](docs/thermal-index.md).
 
-![Sleep Scale Display](images/RenderSleepScale-normal.png)
+![Sleep Scale Display](images/sleep-scale-normal.png)
 
 ### Three Values With Trend
 
-![Three Values With Trend](images/RenderBarsWithTrend-normal.png)
+![Three Values With Trend](images/bars-with-trend-normal.png)
 
 ## Background research
 
@@ -115,8 +115,19 @@ The module minimum is Go 1.24.2. Firmware and images were verified with Go 1.25.
 The program has three small boundaries:
 
 - `cmd/pico_co2` owns Pico hardware setup and the main loop.
-- `internal/app` owns state and one testable `Step`.
+- `internal/app` owns state and one testable `Tick`.
 - `pkg/font`, `pkg/widget`, and `pkg/layout` provide reusable drawing pieces; `internal/display` composes the active screens.
+
+Display errors are intentionally ignored: there is no useful recovery path for
+a failed OLED transfer, and the watchdog restarts the board if the loop stops.
+The image baseline was regenerated after the rendering refactor because the
+previous generator used different sample data and names; keep sample data and
+rendering changes in separate commits.
+
+The reference firmware measurement is `code 79010, rodata 25230, data 26952,
+bss 5800, flash 131192, ram 32752`, built with Go 1.25.9 and TinyGo 0.39.0
+for `pico`.
+The RAM figure is static allocation, not maximum runtime consumption.
 
 To add a screen, compose rows and widgets in `internal/display`, add a `display.Screen` to `ActiveScreens`, and run `make test-displays` to inspect the result.
 

@@ -101,7 +101,7 @@ func TestFIFO16_Contiguous(t *testing.T) {
 		}
 
 		// Enqueue
-		q.Enqueue(8) 
+		q.Enqueue(8)
 		// underlying buf should now be [8,4,5,6,7], head=1, tail=1, count=5
 		expectedBuf := []int16{8, 4, 5, 6, 7}
 		if !reflect.DeepEqual(q.buf, expectedBuf) {

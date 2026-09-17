@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"pico_co2/pkg/ens160"
 	"tinygo.org/x/drivers"
 	"tinygo.org/x/drivers/aht20"
 	"tinygo.org/x/drivers/scd4x"
@@ -19,9 +18,8 @@ type Raw struct {
 type Reader func() (Raw, error)
 
 type Devices struct {
-	aht20  *aht20.Device
-	ens160 *ens160.Device
-	scd4x  *scd4x.Device
+	aht20 *aht20.Device
+	scd4x *scd4x.Device
 }
 
 func New(bus drivers.I2C) (*Devices, error) {
@@ -29,12 +27,9 @@ func New(bus drivers.I2C) (*Devices, error) {
 	aht.Reset()
 	aht.Configure()
 
-	ens := ens160.New(bus, ens160.DefaultAddress)
-	if err := ens.Sleep(); err != nil {
-		return nil, fmt.Errorf("ens160 init: %w", err)
-	}
-
 	scd := scd4x.New(bus)
+	// Preserve the deployed startup settling windows around SCD4x commands;
+	// the driver separately enforces each command's protocol minimum.
 	time.Sleep(1500 * time.Millisecond)
 	if err := scd.Configure(); err != nil {
 		return nil, fmt.Errorf("scd4x configure: %w", err)
@@ -45,7 +40,7 @@ func New(bus drivers.I2C) (*Devices, error) {
 	}
 	time.Sleep(1500 * time.Millisecond)
 
-	return &Devices{aht20: &aht, ens160: ens, scd4x: scd}, nil
+	return &Devices{aht20: &aht, scd4x: scd}, nil
 }
 
 func (d *Devices) Read() (Raw, error) {

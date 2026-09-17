@@ -15,6 +15,10 @@ import (
 // RenderSleepScale shows the two values an air conditioned bedroom is steered
 // by - CO2 and temperature - at the same size, with the sleep thermal scale
 // along the bottom edge.
+//
+//	14:23          55%              WARM
+//	1200 /\                         26 c
+//	______________|###########|#|_______
 func RenderSleepScale(display drivers.Displayer, r *types.Readings) {
 	if display == nil {
 		return
@@ -47,7 +51,12 @@ func RenderSleepScale(display drivers.Displayer, r *types.Readings) {
 	lf.Print(xTemp, y, tempStr)
 	sf.Print(width-sf.Width("c"), y+9, "c")
 
-	widget.ThermalScale(display, 27, 5, apparentC, 24, status.WarmApparentC, status.HotApparentC, 36)
+	widget.ThermalScale(display, 27, 3, apparentC, widget.ThermalRange{
+		Min:  24,
+		Warm: status.WarmApparentC,
+		Hot:  status.HotApparentC,
+		Max:  36,
+	})
 
 	display.Display()
 }

@@ -12,170 +12,216 @@ import (
 	"tinygo.org/x/drivers"
 )
 
-const TimeScreenID = "time"
-
-type Dependencies struct {
-	Display                drivers.Displayer
-	Screens                []display.Screen
-	RTC                    rtc.RTC
-	Read                   sensors.Reader
-	LeftPressed            func() bool
-	RightPressed           func() bool
+type Schedule struct {
 	TimeReadInterval       time.Duration
 	StartupReadInterval    time.Duration
+	StartupWindow          time.Duration
 	SensorReadInterval     time.Duration
+	HistoryInterval        time.Duration
 	SimultaneousPressDelay time.Duration
 }
 
-type State struct {
-	Readings      *types.Readings
-	Screen        int
-	Editor        clockedit.EditorState
+func DefaultSchedule() Schedule {
+	return Schedule{
+		TimeReadInterval:       time.Second,
+		StartupReadInterval:    time.Second,
+		StartupWindow:          time.Minute,
+		SensorReadInterval:     time.Minute,
+		HistoryInterval:        time.Minute,
+		SimultaneousPressDelay: clockedit.DefaultSimultaneousWindow,
+	}
+}
+
+type Deps struct {
+	Display      drivers.Displayer
+	Screens      []display.Screen
+	RTC          rtc.RTC
+	Read         sensors.Reader
+	LeftPressed  func() bool
+	RightPressed func() bool
+	Schedule     Schedule
+}
+
+type App struct {
+	deps          Deps
+	readings      *types.Readings
+	screen        int
+	editor        clockedit.EditorState
 	lastLeftTime  time.Time
 	lastRightTime time.Time
 }
 
-func NewState(queueCapacity int) *State {
-	return &State{Readings: types.InitReadings(queueCapacity)}
+func New(deps Deps, queueCapacity int) *App {
+	if len(deps.Screens) == 0 {
+		panic("app: at least one screen is required")
+	}
+	deps.Schedule = scheduleWithDefaults(deps.Schedule)
+	return &App{deps: deps, readings: types.InitReadings(queueCapacity, deps.Schedule.HistoryInterval)}
 }
 
-func (s *State) Step(deps Dependencies, now time.Time) {
-	if s.Readings == nil || len(deps.Screens) == 0 {
+func scheduleWithDefaults(schedule Schedule) Schedule {
+	defaults := DefaultSchedule()
+	if schedule.TimeReadInterval == 0 {
+		schedule.TimeReadInterval = defaults.TimeReadInterval
+	}
+	if schedule.StartupReadInterval == 0 {
+		schedule.StartupReadInterval = defaults.StartupReadInterval
+	}
+	if schedule.StartupWindow == 0 {
+		schedule.StartupWindow = defaults.StartupWindow
+	}
+	if schedule.SensorReadInterval == 0 {
+		schedule.SensorReadInterval = defaults.SensorReadInterval
+	}
+	if schedule.HistoryInterval == 0 {
+		schedule.HistoryInterval = defaults.HistoryInterval
+	}
+	if schedule.SimultaneousPressDelay == 0 {
+		schedule.SimultaneousPressDelay = defaults.SimultaneousPressDelay
+	}
+	return schedule
+}
+
+func (a *App) Tick(now time.Time) {
+	if a.readings == nil || len(a.deps.Screens) == 0 {
 		return
 	}
-	if !s.handleInput(deps, now) {
-		s.updateReadings(deps, now)
+	if !a.handleInput(now) {
+		a.updateReadings(now)
 	}
-	s.render(deps)
+	a.render()
 }
 
-func (s *State) handleInput(deps Dependencies, now time.Time) bool {
-	left := pressed(deps.LeftPressed)
-	right := pressed(deps.RightPressed)
+func (a *App) handleInput(now time.Time) bool {
+	left := pressed(a.deps.LeftPressed)
+	right := pressed(a.deps.RightPressed)
 	if left {
-		s.lastLeftTime = now
+		a.lastLeftTime = now
 	}
 	if right {
-		s.lastRightTime = now
+		a.lastRightTime = now
 	}
 
-	result := clockedit.ProcessInput(s.Editor, clockedit.ButtonEvent{
-		LeftPressed: left, RightPressed: right, LeftTime: s.lastLeftTime, RightTime: s.lastRightTime,
-	}, s.currentScreen(deps).ID == TimeScreenID, deps.SimultaneousPressDelay)
+	current := a.currentScreen()
+	result := clockedit.ProcessInput(a.editor, clockedit.ButtonEvent{
+		LeftPressed: left, RightPressed: right, LeftTime: a.lastLeftTime, RightTime: a.lastRightTime,
+	}, current.AllowsClockEdit, a.deps.Schedule.SimultaneousPressDelay)
 
 	if result.AttemptEntry {
-		s.Editor = clockedit.Enter(s.Readings.Time.Hour, s.Readings.Time.Minute)
-		s.resetButtonTimes()
-		s.Readings.IsDrawen = false
+		a.editor = clockedit.Enter(a.readings.Time.Hour, a.readings.Time.Minute)
+		a.resetButtonTimes()
+		a.readings.IsDrawen = false
 		return true
 	}
 	if result.Exited {
 		if result.ShouldSave {
-			s.save(deps.RTC, result.State, now)
+			a.save(a.deps.RTC, result.State, now)
 		} else {
-			s.Editor = clockedit.EditorState{}
+			a.editor = clockedit.EditorState{}
 		}
-		s.resetButtonTimes()
-		s.Readings.IsDrawen = false
+		a.resetButtonTimes()
+		a.readings.IsDrawen = false
 		return true
 	}
 
-	s.Editor = result.State
+	a.editor = result.State
 	if result.NavLeft {
-		s.Screen = (s.Screen - 1 + len(deps.Screens)) % len(deps.Screens)
-		s.lastLeftTime = time.Time{}
+		a.screen = (a.screen - 1 + len(a.deps.Screens)) % len(a.deps.Screens)
+		a.lastLeftTime = time.Time{}
 	}
 	if result.NavRight {
-		s.Screen = (s.Screen + 1) % len(deps.Screens)
-		s.lastRightTime = time.Time{}
+		a.screen = (a.screen + 1) % len(a.deps.Screens)
+		a.lastRightTime = time.Time{}
 	}
 	if result.RedrawNeeded {
-		s.Readings.IsDrawen = false
+		a.readings.IsDrawen = false
 	}
 	return false
 }
 
-func (s *State) save(clock rtc.RTC, editor clockedit.EditorState, now time.Time) {
+func (a *App) save(clock rtc.RTC, editor clockedit.EditorState, now time.Time) {
 	current, err := clock.ReadTime()
 	if err != nil {
-		s.Editor = clockedit.HandleSaveAttempt(editor, err)
-		s.Readings.Error = fmt.Sprintf("RTC read: %v", err)
+		a.editor = clockedit.HandleSaveAttempt(editor, err)
+		a.readings.Error = fmt.Sprintf("RTC read: %v", err)
 		return
 	}
 	updated, err := rtc.SaveTime(clock, editor.Hour, editor.Minute, current)
-	s.Editor = clockedit.HandleSaveAttempt(editor, err)
+	a.editor = clockedit.HandleSaveAttempt(editor, err)
 	if err != nil {
-		s.Readings.Error = fmt.Sprintf("RTC save: %v", err)
+		a.readings.Error = fmt.Sprintf("RTC save: %v", err)
 		return
 	}
-	s.Readings.Time.Hour = updated.Hour()
-	s.Readings.Time.Minute = updated.Minute()
-	s.Readings.Time.LastRead = now
-	s.Readings.Error = ""
+	a.readings.Time.Hour = updated.Hour()
+	a.readings.Time.Minute = updated.Minute()
+	a.readings.Time.LastRead = now
+	a.readings.Error = ""
 }
 
-func (s *State) updateReadings(deps Dependencies, now time.Time) {
-	if s.Readings.Time.LastRead.IsZero() || now.Sub(s.Readings.Time.LastRead) >= deps.TimeReadInterval {
-		current, err := deps.RTC.ReadTime()
+func (a *App) updateReadings(now time.Time) {
+	if a.readings.Time.LastRead.IsZero() || now.Sub(a.readings.Time.LastRead) >= a.deps.Schedule.TimeReadInterval {
+		current, err := a.deps.RTC.ReadTime()
 		if err != nil {
-			s.Readings.Error = fmt.Sprintf("DS3231: %v", err)
-			s.Readings.IsDrawen = false
+			a.readings.Error = fmt.Sprintf("DS3231: %v", err)
+			a.readings.IsDrawen = false
 		} else {
-			s.Readings.Time.LastRead = now
-			if s.Readings.Time.Hour != current.Hour() || s.Readings.Time.Minute != current.Minute() {
-				s.Readings.Time.Hour = current.Hour()
-				s.Readings.Time.Minute = current.Minute()
-				s.Readings.IsDrawen = false
+			a.readings.Time.LastRead = now
+			if a.readings.Time.Hour != current.Hour() || a.readings.Time.Minute != current.Minute() {
+				a.readings.Time.Hour = current.Hour()
+				a.readings.Time.Minute = current.Minute()
+				a.readings.IsDrawen = false
 			}
 		}
 	}
-	if !s.shouldReadSensors(deps, now) {
+	if !a.shouldReadSensors(now) {
 		return
 	}
-	raw, err := deps.Read()
+	raw, err := a.deps.Read()
 	if err != nil {
-		s.Readings.Error = err.Error()
-		s.Readings.IsDrawen = false
+		a.readings.Error = err.Error()
+		a.readings.IsDrawen = false
 		return
 	}
-	s.Readings.AddReadingsAt(now, raw.CO2, raw.Temperature, raw.Humidity)
-	s.Readings.IsDrawen = false
+	a.readings.AddReadingsAt(now, raw.CO2, raw.Temperature, raw.Humidity)
+	a.readings.IsDrawen = false
 }
 
-func (s *State) shouldReadSensors(deps Dependencies, now time.Time) bool {
-	if s.Readings.LastUpdateAt.IsZero() {
+func (a *App) shouldReadSensors(now time.Time) bool {
+	if a.readings.LastUpdateAt.IsZero() {
 		return true
 	}
-	elapsed := now.Sub(s.Readings.LastUpdateAt)
-	if now.Sub(s.Readings.FirstReadingAt) < time.Minute {
-		return elapsed >= deps.StartupReadInterval
+	elapsed := now.Sub(a.readings.LastUpdateAt)
+	if now.Sub(a.readings.FirstReadingAt) < a.deps.Schedule.StartupWindow {
+		return elapsed >= a.deps.Schedule.StartupReadInterval
 	}
-	return elapsed >= deps.SensorReadInterval
+	return elapsed >= a.deps.Schedule.SensorReadInterval
 }
 
-func (s *State) render(deps Dependencies) {
-	if s.Readings.IsDrawen {
+func (a *App) render() {
+	if a.readings.IsDrawen {
 		return
 	}
-	s.Readings.ClockEdit = types.ClockEdit{Active: s.Editor.Active, Field: int(s.Editor.Field), Hour: s.Editor.Hour, Minute: s.Editor.Minute}
-	if s.Readings.Error != "" {
-		display.RenderError(deps.Display, s.Readings)
+	a.readings.ClockEdit = types.ClockEdit{Active: a.editor.Active, Field: a.editor.Field, Hour: a.editor.Hour, Minute: a.editor.Minute}
+	if a.editor.Active {
+		a.currentScreen().Render(a.deps.Display, a.readings)
+	} else if a.readings.Error != "" {
+		display.RenderError(a.deps.Display, a.readings)
 	} else {
-		s.currentScreen(deps).Render(deps.Display, s.Readings)
+		a.currentScreen().Render(a.deps.Display, a.readings)
 	}
-	s.Readings.IsDrawen = true
+	a.readings.IsDrawen = true
 }
 
-func (s *State) currentScreen(deps Dependencies) display.Screen {
-	if s.Screen >= len(deps.Screens) {
-		s.Screen = 0
+func (a *App) currentScreen() display.Screen {
+	if a.screen >= len(a.deps.Screens) {
+		a.screen = 0
 	}
-	return deps.Screens[s.Screen]
+	return a.deps.Screens[a.screen]
 }
 
-func (s *State) resetButtonTimes() {
-	s.lastLeftTime = time.Time{}
-	s.lastRightTime = time.Time{}
+func (a *App) resetButtonTimes() {
+	a.lastLeftTime = time.Time{}
+	a.lastRightTime = time.Time{}
 }
 
 func pressed(read func() bool) bool { return read != nil && read() }

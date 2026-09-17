@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"time"
-
+	"pico_co2/internal/app"
+	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
 	"pico_co2/internal/types"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+	"time"
 )
 
 const (
-	queueCapacity       = 480
 	displayWidth  int16 = 128
 	displayHeight int16 = 32
 )
@@ -23,7 +23,8 @@ func main() {
 	if err := os.MkdirAll("images/gallery", 0755); err != nil {
 		fail(err)
 	}
-	readings := sampleReadings()
+	schedule := app.DefaultSchedule()
+	readings := sampleReadings(schedule.HistoryInterval)
 	if err := renderScreens(readings); err != nil {
 		fail(err)
 	}
@@ -32,56 +33,61 @@ func main() {
 	}
 }
 
-func sampleReadings() *types.Readings {
-	readings := types.InitReadings(queueCapacity)
+func sampleReadings(historyInterval time.Duration) *types.Readings {
+	readings := types.InitReadings(
+		types.DefaultHistoryCapacity,
+		historyInterval,
+	)
 	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
 	readings.Time.LastRead = now
 	readings.Time.Hour = 14
 	readings.Time.Minute = 23
-	for i := 0; i < queueCapacity; i++ {
-		radians := float64(i) * 2 * math.Pi / queueCapacity
+	for i := range types.DefaultHistoryCapacity {
+		radians := float64(i) * 2 * math.Pi / types.DefaultHistoryCapacity
 		readings.AddReadingsAt(
-			now.Add(time.Duration(i)*time.Minute),
+			now.Add(time.Duration(i)*historyInterval),
 			uint16(1200+300*math.Sin(radians)),
 			float32(25+2*math.Sin(radians)),
 			float32(50+10*math.Sin(radians)),
 		)
 	}
-	readings.AddReadingsAt(now.Add(queueCapacity*time.Minute), 1200, 26, 55)
+	readings.AddReadingsAt(
+		now.Add(types.DefaultHistoryCapacity*historyInterval),
+		1200,
+		29,
+		55,
+	)
 	return readings
 }
 
 func renderScreens(readings *types.Readings) error {
 	screens := display.ActiveScreens()
-	for _, state := range []struct {
-		name  string
-		edit  types.ClockEdit
-		error string
-	}{
-		{name: "normal"},
-		{name: "error", error: "Test error message for display with long text that should wrap correctly across multiple lines."},
-	} {
-		for _, screen := range screens {
-			copy := *readings
-			copy.Error = state.error
-			if copy.Error != "" {
-				if err := render(screenImageName(screen)+"-"+state.name, func(device *display.VirtualDisplay) { display.RenderError(device, &copy) }); err != nil {
-					return err
-				}
-			} else if err := render(screenImageName(screen)+"-"+state.name, func(device *display.VirtualDisplay) { screen.Render(device, &copy) }); err != nil {
-				return err
-			}
+	for _, screen := range screens {
+		sample := *readings
+		ff := func(device *display.VirtualDisplay) {
+			screen.Render(device, &sample)
 		}
+		if err := render(screen.ID+"-normal", ff); err != nil {
+			return err
+		}
+	}
+	errorReadings := *readings
+	errorReadings.Error = "Test error message for display with long text that should wrap correctly across multiple lines."
+	if err := render("error", func(device *display.VirtualDisplay) { display.RenderError(device, &errorReadings) }); err != nil {
+		return err
 	}
 	for _, edit := range []struct {
 		name  string
-		field int
+		field types.ClockEdit
 	}{
-		{"edit-hour", types.EditFieldHour}, {"edit-minute", types.EditFieldMinute}, {"edit-save", types.EditFieldSave}, {"edit-cancel", types.EditFieldCancel},
+		{"edit-hour", types.ClockEdit{Active: true, Field: clockedit.FieldHour, Hour: 14, Minute: 23}},
+		{"edit-minute", types.ClockEdit{Active: true, Field: clockedit.FieldMinute, Hour: 14, Minute: 23}},
+		{"edit-save", types.ClockEdit{Active: true, Field: clockedit.FieldSave, Hour: 14, Minute: 23}},
+		{"edit-cancel", types.ClockEdit{Active: true, Field: clockedit.FieldCancel, Hour: 14, Minute: 23}},
 	} {
-		copy := *readings
-		copy.ClockEdit = types.ClockEdit{Active: true, Field: edit.field, Hour: 14, Minute: 23}
-		if err := render("RenderTime-"+edit.name, func(device *display.VirtualDisplay) { display.RenderTime(device, &copy) }); err != nil {
+		sample := *readings
+		sample.ClockEdit = edit.field
+		if err := render("time-"+edit.name, func(device *display.VirtualDisplay) { display.RenderTime(device, &sample) }); err != nil {
 			return err
 		}
 	}
@@ -92,7 +98,9 @@ func renderGallery() error {
 	values := []float32{20, 24, 28, 32, 36, 40}
 	for _, value := range values {
 		name := fmt.Sprintf("gallery/thermal-%02d", int(value))
-		if err := render(name, func(device *display.VirtualDisplay) { widget.ThermalScale(device, 14, 5, value, 24, 28, 32, 36) }); err != nil {
+		if err := render(name, func(device *display.VirtualDisplay) {
+			widget.ThermalScale(device, 14, 3, value, widget.ThermalRange{Min: 24, Warm: 28, Hot: 32, Max: 36})
+		}); err != nil {
 			return err
 		}
 	}
@@ -104,7 +112,7 @@ func renderGallery() error {
 			return err
 		}
 	}
-	for _, direction := range []widget.TrendDirection{widget.TrendRising, widget.TrendStable, widget.TrendFalling} {
+	for _, direction := range []widget.TrendDirection{widget.TrendRising, widget.TrendStable, widget.TrendFalling, widget.TrendUnknown} {
 		name := fmt.Sprintf("gallery/trend-%d", direction)
 		if err := render(name, func(device *display.VirtualDisplay) { widget.Trend(device, 64, 16, direction) }); err != nil {
 			return err
@@ -113,7 +121,19 @@ func renderGallery() error {
 	if err := render("gallery/square-bar", func(device *display.VirtualDisplay) { widget.SquareBar(device, 0, 12, 3) }); err != nil {
 		return err
 	}
+	if err := render("gallery/square-bar-empty", func(device *display.VirtualDisplay) { widget.SquareBar(device, 0, 12, 0) }); err != nil {
+		return err
+	}
+	if err := render("gallery/square-bar-full", func(device *display.VirtualDisplay) { widget.SquareBar(device, 0, 12, 4) }); err != nil {
+		return err
+	}
 	if err := render("gallery/vertical-bar", func(device *display.VirtualDisplay) { widget.VerticalBar(device, 60, 8, 3, 4) }); err != nil {
+		return err
+	}
+	if err := render("gallery/vertical-bar-empty", func(device *display.VirtualDisplay) { widget.VerticalBar(device, 60, 8, 0, 4) }); err != nil {
+		return err
+	}
+	if err := render("gallery/vertical-bar-full", func(device *display.VirtualDisplay) { widget.VerticalBar(device, 60, 8, 4, 4) }); err != nil {
 		return err
 	}
 	for _, text := range []string{"short", "a deliberately long message that wraps over the display width"} {
@@ -124,28 +144,23 @@ func renderGallery() error {
 			return err
 		}
 	}
-	return render("gallery/sparkline", func(device *display.VirtualDisplay) {
-		widget.Sparkline(device, 0, 8, 128, 21, []int16{0, 10, 30, 10, 50, 20, 0})
-	})
-}
-
-func screenImageName(screen display.Screen) string {
-	switch screen.ID {
-	case "time":
-		return "RenderTime"
-	case "sleep-scale":
-		return "RenderSleepScale"
-	case "bars-with-trend":
-		return "RenderBarsWithTrend"
-	case "sparkline-co2":
-		return "RenderSparklineCO2"
-	case "sparkline-temperature":
-		return "RenderSparklineT"
-	case "sparkline-humidity":
-		return "RenderSparklineRH"
-	default:
-		return screen.ID
+	if err := render("gallery/row", func(device *display.VirtualDisplay) {
+		face := font.New(device, font.ProggySZ8)
+		layout.Three(device, face, 12, "LEFT", "MID", "RIGHT")
+	}); err != nil {
+		return err
 	}
+	if err := render("gallery/sparkline", func(device *display.VirtualDisplay) {
+		widget.Sparkline(device, 0, 8, 128, 21, []int16{0, 10, 30, 10, 50, 20, 0})
+	}); err != nil {
+		return err
+	}
+	return render(
+		"gallery/sparkline-empty",
+		func(device *display.VirtualDisplay) {
+			widget.Sparkline(device, 0, 8, 128, 21, nil)
+		},
+	)
 }
 
 func render(name string, draw func(*display.VirtualDisplay)) error {

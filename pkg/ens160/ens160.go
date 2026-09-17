@@ -190,6 +190,7 @@ func (d *Device) EnableMeasurements() error {
 	time.Sleep(longTimeout)
 	return nil
 }
+
 // write1 writes a single byte to a register.
 func (d *Device) write1(reg, val uint8) error {
 	d.wbuf[0] = reg

@@ -1,3 +1,10 @@
+// Package font selects TinyGo bitmap fonts and draws text using top-left
+// coordinates.
+//
+//	(x,y) text
+//	  +---------+
+//	  |ABC      |
+//	  +---------+
 package font
 
 import (
@@ -12,6 +19,7 @@ import (
 	"tinygo.org/x/tinyfont/proggy"
 )
 
+// FontType identifies one of the bitmap fonts compiled into the program.
 type FontType int
 
 const (
@@ -30,27 +38,35 @@ const (
 	Notosans
 )
 
+// Face couples a font with the display it draws onto.
 type Face struct {
 	display drivers.Displayer
 	font    tinyfont.Fonter
-	width   int16
+	fixed   int16
 	height  int16
 }
 
+// New returns a face bound to display.
 func New(display drivers.Displayer, typ FontType) Face {
 	face := Face{display: display, font: source(typ)}
 	if typ == ProggySZ8 {
-		face.width = 6
+		face.fixed = 6
 		face.height = 6
 		return face
 	}
 	if glyph := face.font.GetGlyph('0'); glyph != nil {
-		face.width = int16(glyph.Info().Width)
 		face.height = int16(glyph.Info().Height)
 	}
 	return face
 }
 
+// Print draws text with (x,y) as its top-left corner and returns its width.
+//
+//	(x,y)
+//	  +----------+
+//	  |text      |
+//	  +----------+
+//	  |< width ->|
 func (f Face) Print(x, y int16, text string) int16 {
 	if f.display == nil || f.font == nil {
 		return 0
@@ -59,20 +75,28 @@ func (f Face) Print(x, y int16, text string) int16 {
 	return f.Width(text)
 }
 
+// Width returns the horizontal pixel extent of text without drawing it.
+// Proggy is an ASCII-only fixed-width face, so its width is measured in bytes.
+//
+//	|<---- Width("text") ---->|
+//	text
 func (f Face) Width(text string) int16 {
 	if f.font == nil {
 		return 0
 	}
-	if f.width == 6 {
-		return int16(len(text)) * f.width
+	if f.fixed > 0 {
+		return int16(len(text)) * f.fixed
 	}
 	_, width := tinyfont.LineWidth(f.font, text)
 	return int16(width)
 }
 
+// Height returns the face's pixel height.
+//
+//	+------+
+//	| text | ^
+//	+------+ | Height
 func (f Face) Height() int16 { return f.height }
-
-func (f Face) Raw() tinyfont.Fonter { return f.font }
 
 func source(typ FontType) tinyfont.Fonter {
 	switch typ {
