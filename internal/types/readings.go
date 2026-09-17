@@ -91,11 +91,20 @@ func (r *Readings) AddReadings(
 	temperature float32,
 	humidity float32,
 ) {
+	r.AddReadingsAt(time.Now(), co2, temperature, humidity)
+}
+
+func (r *Readings) AddReadingsAt(
+	now time.Time,
+	co2 uint16,
+	temperature float32,
+	humidity float32,
+) {
 	r.Error = ""
-	r.LastUpdateAt = time.Now()
+	r.LastUpdateAt = now
 
 	if r.FirstReadingAt.IsZero() {
-		r.FirstReadingAt = time.Now()
+		r.FirstReadingAt = now
 	}
 
 	dewPoint := status.DewPointC(temperature, humidity)
@@ -108,7 +117,7 @@ func (r *Readings) AddReadings(
 		return
 	}
 
-	if time.Since(r.History.AddedAt) > r.History.Granularity {
+	if now.Sub(r.History.AddedAt) > r.History.Granularity {
 		if co2 > 0 {
 			r.History.CO2.Enqueue(int16(co2))
 		}
@@ -117,7 +126,7 @@ func (r *Readings) AddReadings(
 		hiVal := status.HeatIndexVal(temperature, humidity)
 		r.History.HeatIndexTemp.Enqueue(int16(math.Round(float64(hiVal))))
 		r.History.DewPoint.Enqueue(int16(math.Round(float64(dewPoint))))
-		r.History.AddedAt = time.Now()
+		r.History.AddedAt = now
 	}
 
 	// Calculate 15-minute average of last 15 readings

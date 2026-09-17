@@ -1,4 +1,4 @@
-.PHONY: all flash build version install_tinygo_edit flash_ens160_example build_ens160_example test-displays test-unit
+.PHONY: all flash build size version install_tinygo_edit flash_ens160_example build_ens160_example test-displays test-unit check-images
 
 vi:
 	tinygo-edit --target pico --editor nvim --wait
@@ -28,6 +28,10 @@ build_ens160_example:
 
 test-displays:
 	go run ./cmd/virtualdisplay/
+	git status --short images/
 
 test-unit:
-	go test -v ./internal/display/...
+	go test -v ./internal/app ./internal/clockedit ./internal/display ./internal/rtc ./internal/types ./internal/types/status ./pkg/fifo ./pkg/font ./pkg/layout ./pkg/widget ./pkg/miniplot ./pkg/sparkline
+
+check-images: test-displays
+	test -z "$$(git status --porcelain -- images/)"

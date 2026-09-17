@@ -67,6 +67,8 @@ make flash
 make test-displays
 ```
 
+This regenerates the active screens and `images/gallery/`, then lists image changes for visual review.
+
 ## Display Themes
 
 Below are examples of the different display themes available:
@@ -108,9 +110,26 @@ Why the displayed numbers and thresholds are what they are, with sources:
 
 ## Development
 
+The module minimum is Go 1.24.2. Firmware and images were verified with Go 1.25.9 and TinyGo 0.39.0, as recorded in `.tool-versions`.
+
+The program has three small boundaries:
+
+- `cmd/pico_co2` owns Pico hardware setup and the main loop.
+- `internal/app` owns state and one testable `Step`.
+- `pkg/font`, `pkg/widget`, and `pkg/layout` provide reusable drawing pieces; `internal/display` composes the active screens.
+
+To add a screen, compose rows and widgets in `internal/display`, add a `display.Screen` to `ActiveScreens`, and run `make test-displays` to inspect the result.
+
+Run host checks with:
+
+```bash
+make test-unit
+make check-images
+```
+
 ### requirements for vim development
 
-- go version go1.24.4 linux/amd64
+- go version go1.25.9 linux/amd64
 - tinygo version 0.39.0 linux/amd64
 - go install github.com/sago35/tinygo-edit@latest
 - run as `tinygo-edit --target pico --editor nvim --wait`
