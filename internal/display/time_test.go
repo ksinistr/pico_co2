@@ -1,9 +1,8 @@
 package display
 
 import (
-	"testing"
-
 	"pico_co2/internal/clockedit"
+	"testing"
 )
 
 func TestFormatTime(t *testing.T) {

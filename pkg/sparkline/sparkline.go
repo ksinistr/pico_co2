@@ -11,7 +11,7 @@ func NewSparkline(height int) *Sparkline {
 }
 
 // percentile returns the p-th percentile (0–100) from raw data using index method without floats.
-func (s *Sparkline) percentile(raw []int16, p int) int16 {
+func percentile(raw []int16, p int) int16 {
 	// copy and sort
 	sorted := make([]int16, len(raw))
 	copy(sorted, raw)
@@ -21,7 +21,9 @@ func (s *Sparkline) percentile(raw []int16, p int) int16 {
 			sorted[j], sorted[j-1] = sorted[j-1], sorted[j]
 		}
 	}
+
 	idx := p * (len(sorted) - 1) / 100
+
 	return sorted[idx]
 }
 
@@ -30,12 +32,15 @@ func median3(a, b, c int16) int16 {
 	if a > b {
 		a, b = b, a
 	}
+
 	if b > c {
-		b, c = c, b
+		if a > c {
+			return a
+		}
+
+		return c
 	}
-	if a > b {
-		a, b = b, a
-	}
+
 	return b
 }
 
@@ -46,115 +51,142 @@ func (s *Sparkline) Process(raw []int16) []int16 {
 		return []int16{}
 	}
 
-	// 1. compute percentiles
-	p1 := s.percentile(raw, 1)
-	p99 := s.percentile(raw, 99)
+	filtered := trim(raw, percentile(raw, 1), percentile(raw, 99))
+	smoothed := smooth(filtered)
 
-	// 2. trim extremes
-	filtered := make([]int16, 0, rawLen)
-	for _, v := range raw {
-		if v < p1 || v > p99 {
-			continue
-		}
-		filtered = append(filtered, v)
-	}
-	if len(filtered) == 0 {
-		filtered = raw
-	}
-
-	// 3. median smoothing (window 3)
-	smoothed := make([]int16, len(filtered))
-	if len(filtered) < 2 {
-		copy(smoothed, filtered)
-	} else {
-		for i := range filtered {
-			var a, b, c int16
-			b = filtered[i]
-			if i == 0 {
-				a = filtered[0]
-				c = filtered[1]
-			} else if i == len(filtered)-1 {
-				a = filtered[i-1]
-				c = filtered[i]
-			} else {
-				a = filtered[i-1]
-				c = filtered[i+1]
-			}
-			smoothed[i] = median3(a, b, c)
-		}
-	}
-
-	// max-min normalization to fit into sparkline height
 	if len(smoothed) == 0 {
 		return make([]int16, rawLen)
 	}
-	min := smoothed[0]
-	max := smoothed[0]
-	for _, v := range smoothed {
-		if v < min {
-			min = v
-		}
-		if v > max {
-			max = v
+
+	minValue, maxValue := minMax(smoothed)
+
+	if minValue == maxValue {
+		return constantSeries(rawLen, int16(s.Height/2))
+	}
+
+	normalized := normalize(smoothed, minValue, maxValue, s.Height)
+
+	return resample(normalized, rawLen, s.Height)
+}
+
+func trim(raw []int16, lower, upper int16) []int16 {
+	filtered := make([]int16, 0, len(raw))
+	for _, value := range raw {
+		if value >= lower && value <= upper {
+			filtered = append(filtered, value)
 		}
 	}
 
-	// if all values are the same, return a constant series
-	if min == max {
-		constant := int16(s.Height / 2)
-		final := make([]int16, rawLen)
-		for i := range final {
-			final[i] = constant
-		}
-		return final
+	if len(filtered) == 0 {
+		return raw
 	}
 
-	// normalize to height
-	scale := max - min
-	for i := range smoothed {
-		// scale to height-1, to fit in 0..height-1 range
-		smoothed[i] = int16((int32(smoothed[i]-min) * int32(s.Height-1)) / int32(scale))
+	return filtered
+}
+
+func smooth(values []int16) []int16 {
+	smoothed := make([]int16, len(values))
+	if len(values) < 2 {
+		copy(smoothed, values)
+
+		return smoothed
 	}
 
-	// 4. linear resampling back to rawLen points
-	final := make([]int16, rawLen)
-	if len(smoothed) <= 1 {
-		val := int16(s.Height / 2)
-		if len(smoothed) == 1 {
-			val = smoothed[0]
-		}
-		for i := range final {
-			final[i] = val
-		}
-		return final
+	for i := range values {
+		a, b, c := window(values, i)
+		smoothed[i] = median3(a, b, c)
 	}
 
-	if rawLen <= 1 {
-		if rawLen == 1 {
-			final[0] = smoothed[0]
+	return smoothed
+}
+
+//nolint:nonamedreturns // The result names document the smoothing window.
+func window(values []int16, i int) (first, middle, last int16) {
+	switch i {
+	case 0:
+		return values[0], values[0], values[1]
+	case len(values) - 1:
+		return values[i-1], values[i], values[i]
+	default:
+		return values[i-1], values[i], values[i+1]
+	}
+}
+
+//nolint:nonamedreturns // The result names document the two extrema.
+func minMax(values []int16) (minValue, maxValue int16) {
+	minValue = values[0]
+	maxValue = values[0]
+
+	for _, value := range values[1:] {
+		if value < minValue {
+			minValue = value
 		}
-		return final
+
+		if value > maxValue {
+			maxValue = value
+		}
 	}
 
-	inDenom := len(smoothed) - 1
-	outDenom := rawLen - 1
-	for i := range final {
-		// interpolation position
-		num := i * inDenom
-		idx := num / outDenom
-		rem := num % outDenom
+	return minValue, maxValue
+}
 
-		v0 := smoothed[idx]
-		next := idx + 1
-		if next >= len(smoothed) {
-			next = len(smoothed) - 1
-		}
-		v1 := smoothed[next]
-
-		// interpolate: (v0*(out_denom-rem) + v1*rem) / out_denom
-		interp := (int32(v0)*(int32(outDenom)-int32(rem)) + int32(v1)*int32(rem)) / int32(outDenom)
-		final[i] = int16(interp)
+func normalize(values []int16, minValue, maxValue int16, height int) []int16 {
+	scale := maxValue - minValue
+	for i := range values {
+		values[i] = int16((int32(values[i]-minValue) * int32(height-1)) / int32(scale))
 	}
 
-	return final
+	return values
+}
+
+func constantSeries(length int, value int16) []int16 {
+	series := make([]int16, length)
+	for i := range series {
+		series[i] = value
+	}
+
+	return series
+}
+
+func resample(values []int16, outputLength, height int) []int16 {
+	result := make([]int16, outputLength)
+	if len(values) <= 1 {
+		value := int16(height / 2)
+		if len(values) == 1 {
+			value = values[0]
+		}
+
+		return constantSeries(outputLength, value)
+	}
+
+	if outputLength <= 1 {
+		if outputLength == 1 {
+			result[0] = values[0]
+		}
+
+		return result
+	}
+
+	inputDenominator := len(values) - 1
+	outputDenominator := outputLength - 1
+
+	for i := range result {
+		numerator := i * inputDenominator
+		index := numerator / outputDenominator
+		remainder := numerator % outputDenominator
+
+		next := index + 1
+		if next >= len(values) {
+			next = len(values) - 1
+		}
+
+		result[i] = interpolate(values[index], values[next], remainder, outputDenominator)
+	}
+
+	return result
+}
+
+func interpolate(first, second int16, numerator, denominator int) int16 {
+	value := int32(first)*(int32(denominator)-int32(numerator)) + int32(second)*int32(numerator)
+	return int16(value / int32(denominator))
 }

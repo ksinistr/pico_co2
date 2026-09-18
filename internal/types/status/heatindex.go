@@ -41,21 +41,12 @@ const (
 	UnknownHeatIndex
 )
 
-var HeatIndexStatusStrings = [...]string{
-	"No heat",
-	"Caution",
-	"Extreme caution",
-	"Danger",
-	"Extreme danger",
-	"Unknown Heat Index",
-}
-
 func GetHeatIndex(tempC, rh float32) HeatIndex {
 	heatIndex := HeatIndexVal(tempC, rh)
-	return getHeatIndex(heatIndex)
+	return calculateHeatIndex(heatIndex)
 }
 
-func getHeatIndex(heatIndex float32) HeatIndex {
+func calculateHeatIndex(heatIndex float32) HeatIndex {
 	switch {
 	case heatIndex < 27:
 		return NoHeat
@@ -71,8 +62,18 @@ func getHeatIndex(heatIndex float32) HeatIndex {
 }
 
 func (h HeatIndex) String() string {
-	if h < NoHeat || h > UnknownHeatIndex {
+	switch h {
+	case NoHeat:
+		return "No heat"
+	case Caution:
+		return "Caution"
+	case ExtremeCaution:
+		return "Extreme caution"
+	case Danger:
+		return "Danger"
+	case ExtremeDanger:
+		return "Extreme danger"
+	default:
 		return "Unknown Heat Index"
 	}
-	return HeatIndexStatusStrings[h]
 }

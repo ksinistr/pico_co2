@@ -1,14 +1,13 @@
 package main
 
 import (
-	"time"
-
 	"machine"
 	"pico_co2/internal/app"
-	"pico_co2/internal/button"
 	"pico_co2/internal/display"
 	"pico_co2/internal/sensors"
 	"pico_co2/internal/types"
+	"time"
+
 	"tinygo.org/x/drivers/ds3231"
 	"tinygo.org/x/drivers/ssd1306"
 )
@@ -45,8 +44,8 @@ func main() {
 	}
 	initializeClock(&clock)
 
-	left := button.NewTouchButton(machine.GP10)
-	right := button.NewTouchButton(machine.GP11)
+	left := NewTouchButton(machine.GP10)
+	right := NewTouchButton(machine.GP11)
 	monitor := app.New(app.Deps{
 		Display:      &device,
 		Screens:      display.ActiveScreens(),

@@ -5,6 +5,7 @@ import (
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+
 	"tinygo.org/x/drivers"
 )
 
@@ -27,5 +28,7 @@ func RenderError(display drivers.Displayer, r *types.Readings) {
 		layout.LongText(display, face, 0, 0, "No error message available")
 	}
 
-	display.Display()
+	if err := display.Display(); err != nil {
+		return
+	}
 }

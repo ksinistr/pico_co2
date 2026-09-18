@@ -2,11 +2,10 @@ package types
 
 import (
 	"math"
-	"time"
-
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/fifo"
+	"time"
 )
 
 type Readings struct {
@@ -91,6 +90,7 @@ func (r *Readings) AddReadingsAt(
 		if co2 > 0 {
 			r.History.CO2.Enqueue(int16(co2))
 		}
+
 		r.History.Temperature.Enqueue(int16(math.Round(float64(temperature))))
 		r.History.Humidity.Enqueue(int16(math.Round(float64(humidity))))
 		r.History.AddedAt = now
@@ -106,46 +106,14 @@ func (r *Readings) AddReadingsAt(
 }
 
 func (r *Readings) calculateCO2Trend() {
-	if r.History.CO2.Len() < 10 {
-		r.Calculated.CO2Trend = status.UnknownCO2Trend
-		return
-	}
-
 	readings := r.History.CO2.Contiguous()
 	if len(readings) < 10 {
 		r.Calculated.CO2Trend = status.UnknownCO2Trend
 		return
 	}
 
-	var prevSum uint32
-	prevCount := 0
-	for i := len(readings) - 10; i < len(readings)-5 && i >= 0; i++ {
-		if i >= 0 && i < len(readings) {
-			prevSum += uint32(readings[i])
-			prevCount++
-		}
-	}
-
-	if prevCount == 0 {
-		r.Calculated.CO2Trend = status.UnknownCO2Trend
-		return
-	}
-	prevAvg := uint16(prevSum / uint32(prevCount))
-
-	var currSum uint32
-	currCount := 0
-	for i := len(readings) - 5; i < len(readings) && i >= 0; i++ {
-		if i >= 0 && i < len(readings) {
-			currSum += uint32(readings[i])
-			currCount++
-		}
-	}
-
-	if currCount == 0 {
-		r.Calculated.CO2Trend = status.UnknownCO2Trend
-		return
-	}
-	currAvg := uint16(currSum / uint32(currCount))
+	prevAvg := averageCO2(readings[len(readings)-10 : len(readings)-5])
+	currAvg := averageCO2(readings[len(readings)-5:])
 
 	diff := int32(currAvg) - int32(prevAvg)
 	switch {
@@ -156,5 +124,13 @@ func (r *Readings) calculateCO2Trend() {
 	default:
 		r.Calculated.CO2Trend = status.StableCO2
 	}
+}
 
+func averageCO2(readings []int16) uint16 {
+	var sum uint32
+	for _, reading := range readings {
+		sum += uint32(reading)
+	}
+
+	return uint16(sum / uint32(len(readings)))
 }

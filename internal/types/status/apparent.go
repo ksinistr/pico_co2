@@ -13,10 +13,13 @@ func VaporPressureHPA(tempC, rh float32) float32 {
 	if rh < 1 {
 		rh = 1
 	}
+
 	if rh > 100 {
 		rh = 100
 	}
+
 	svpHPA := 6.112 * math.Exp((17.62*float64(tempC))/(243.12+float64(tempC)))
+
 	return float32(svpHPA * float64(rh) / 100)
 }
 
@@ -35,12 +38,6 @@ const (
 	HotSleepThermal
 )
 
-var SleepThermalStrings = [...]string{
-	"GOOD",
-	"WARM",
-	"HOT",
-}
-
 func ToSleepThermal(apparentC float32) SleepThermal {
 	switch {
 	case apparentC < WarmApparentC:
@@ -53,8 +50,14 @@ func ToSleepThermal(apparentC float32) SleepThermal {
 }
 
 func (s SleepThermal) String() string {
-	if s > HotSleepThermal {
-		return SleepThermalStrings[HotSleepThermal]
+	switch s {
+	case GoodSleepThermal:
+		return "GOOD"
+	case WarmSleepThermal:
+		return "WARM"
+	case HotSleepThermal:
+		return "HOT"
+	default:
+		return "HOT"
 	}
-	return SleepThermalStrings[s]
 }

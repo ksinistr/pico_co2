@@ -1,10 +1,9 @@
-package button
+package main
 
 import (
+	"machine"
 	"sync/atomic"
 	"time"
-
-	"machine"
 )
 
 type TouchButton struct {

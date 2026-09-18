@@ -9,16 +9,17 @@ const (
 	UnknownCO2Trend
 )
 
-var CO2TrendStrings = [...]string{
-	"Stable",
-	"Rising",
-	"Falling",
-	"Unknown",
-}
-
 func (c CO2Trend) String() string {
-	if c < StableCO2 || c > UnknownCO2Trend {
+	switch c {
+	case StableCO2:
+		return "Stable"
+	case RisingCO2:
+		return "Rising"
+	case FallingCO2:
+		return "Falling"
+	case UnknownCO2Trend:
+		return "Unknown"
+	default:
 		return "Unknown"
 	}
-	return CO2TrendStrings[c]
 }

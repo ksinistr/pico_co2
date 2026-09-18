@@ -77,19 +77,35 @@ func (mp *MiniPlot) DrawLineChart(
 	}
 
 	minVal := data[0]
+
 	maxVal := data[0]
 	for _, v := range data {
 		if v < minVal {
 			minVal = v
 		}
+
 		if v > maxVal {
 			maxVal = v
 		}
 	}
 
-	tinydraw.FilledRectangle(mp.display, 0, 0, mp.DisplayWidth, mp.DisplayHeight, color.RGBA{0, 0, 0, 255})
+	if err := tinydraw.FilledRectangle(
+		mp.display,
+		0,
+		0,
+		mp.DisplayWidth,
+		mp.DisplayHeight,
+		color.RGBA{0, 0, 0, 255},
+	); err != nil {
+		return fmt.Errorf("clear plot: %w", err)
+	}
+
 	mp.drawAxis(maxVal, minVal, title)
 	mp.drawData(data, minVal, maxVal)
+
+	if err := mp.display.Display(); err != nil {
+		return fmt.Errorf("display plot: %w", err)
+	}
 
 	return nil
 }
@@ -108,21 +124,21 @@ func (mp *MiniPlot) drawAxis(
 	tinydraw.Line(mp.display, startX, startY, startX, 0, mp.Color)
 	tinydraw.Line(mp.display, startX, startY, mp.DisplayWidth-1, startY, mp.Color)
 	mp.drawText(1, startY+mp.fontHeight, title)
-	label := mp.formatValue(minValue)
+
+	label := formatValue(minValue)
 	mp.drawText(1, startY, label)
 
-	label = mp.formatValue(maxValue)
+	label = formatValue(maxValue)
 	mp.drawText(1, mp.fontHeight, label)
 
 	text := "0h"
 	textWidth := int16(len(text)) * mp.fontWidth
-	halfTextWidth := textWidth / 2
 	xPos := mp.DisplayWidth - textWidth
 	mp.drawText(xPos, startY+mp.fontHeight, text)
 
 	text = "-1h"
 	textWidth = int16(len(text)) * mp.fontWidth
-	halfTextWidth = textWidth / 2
+	halfTextWidth := textWidth / 2
 	xPos = mp.DisplayWidth - int16(60) - halfTextWidth
 	mp.drawText(xPos, startY+mp.fontHeight, text)
 }
@@ -143,6 +159,7 @@ func (mp *MiniPlot) drawData(samples []int16, minV, maxV int16) {
 	if rangeVal == 0 {
 		rangeVal = 1
 	}
+
 	pixelsPerUnit := float64(baseY-topY) / rangeVal
 
 	pixelY := func(v int16) int16 {
@@ -158,11 +175,9 @@ func (mp *MiniPlot) drawData(samples []int16, minV, maxV int16) {
 
 		tinydraw.Line(mp.display, x1, y1, x2, y2, mp.Color)
 	}
-
-	mp.display.Display()
 }
 
-func (mp *MiniPlot) formatValue(value int16) string {
+func formatValue(value int16) string {
 	if value >= 1000 {
 		return fmt.Sprintf("%dk", value/1000)
 	}

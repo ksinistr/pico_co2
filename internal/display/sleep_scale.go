@@ -3,12 +3,12 @@ package display
 import (
 	"fmt"
 	"math"
-
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+
 	"tinygo.org/x/drivers"
 )
 
@@ -58,5 +58,7 @@ func RenderSleepScale(display drivers.Displayer, r *types.Readings) {
 		Max:  36,
 	})
 
-	display.Display()
+	if err := display.Display(); err != nil {
+		return
+	}
 }

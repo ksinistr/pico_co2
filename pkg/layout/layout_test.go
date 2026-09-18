@@ -2,10 +2,9 @@ package layout
 
 import (
 	"image/color"
+	"pico_co2/pkg/font"
 	"reflect"
 	"testing"
-
-	"pico_co2/pkg/font"
 )
 
 type testDisplay struct {

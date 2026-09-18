@@ -27,13 +27,16 @@ func DetectSimultaneous(ev ButtonEvent, window time.Duration) bool {
 	if !ev.LeftPressed || !ev.RightPressed {
 		return false
 	}
+
 	if ev.LeftTime.IsZero() || ev.RightTime.IsZero() {
 		return false
 	}
+
 	diff := ev.LeftTime.Sub(ev.RightTime)
 	if diff < 0 {
 		diff = -diff
 	}
+
 	return diff <= window
 }
 
@@ -44,11 +47,13 @@ func ProcessInput(state EditorState, ev ButtonEvent, onTimeScreen bool, window t
 	if state.Active {
 		return processEditorInput(state, ev, simultaneous || bothInCycle)
 	}
+
 	return processNormalInput(state, ev, onTimeScreen, simultaneous || bothInCycle)
 }
 
 func processEditorInput(state EditorState, ev ButtonEvent, bothPressed bool) InputResult {
 	var action Action
+
 	switch {
 	case bothPressed:
 		action = ActionBoth
@@ -61,6 +66,7 @@ func processEditorInput(state EditorState, ev ButtonEvent, bothPressed bool) Inp
 	}
 
 	tr := state.HandleAction(action)
+
 	return InputResult{
 		State:        tr.State,
 		ShouldSave:   tr.ShouldSave,
@@ -69,7 +75,7 @@ func processEditorInput(state EditorState, ev ButtonEvent, bothPressed bool) Inp
 	}
 }
 
-func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen bool, bothPressed bool) InputResult {
+func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen, bothPressed bool) InputResult {
 	if bothPressed {
 		if onTimeScreen {
 			return InputResult{
@@ -78,6 +84,7 @@ func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen bool, bo
 				RedrawNeeded: true,
 			}
 		}
+
 		return InputResult{State: state}
 	}
 
@@ -86,10 +93,12 @@ func processNormalInput(state EditorState, ev ButtonEvent, onTimeScreen bool, bo
 		result.NavLeft = true
 		result.RedrawNeeded = true
 	}
+
 	if ev.RightPressed {
 		result.NavRight = true
 		result.RedrawNeeded = true
 	}
+
 	return result
 }
 
@@ -97,5 +106,6 @@ func HandleSaveAttempt(state EditorState, saveErr error) EditorState {
 	if saveErr != nil {
 		return Enter(state.Hour, state.Minute)
 	}
+
 	return EditorState{}
 }

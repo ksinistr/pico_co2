@@ -11,10 +11,10 @@ type FIFO16 struct {
 }
 
 // NewFIFO16 creates a FIFO with the given capacity (1..MaxCapacity).
-func NewFIFO16(cap int) *FIFO16 {
+func NewFIFO16(capacity int) *FIFO16 {
 	return &FIFO16{
-		buf:      make([]int16, cap),
-		capacity: cap,
+		buf:      make([]int16, capacity),
+		capacity: capacity,
 	}
 }
 
@@ -45,26 +45,29 @@ func (q *FIFO16) Enqueue(v int16) {
 		q.head = (q.head + 1) % q.capacity
 		q.count--
 	}
+
 	q.buf[q.tail] = v
 	q.tail = (q.tail + 1) % q.capacity
 	q.count++
 }
 
 // Dequeue removes and returns the oldest element; ok=false if empty.
-func (q *FIFO16) Dequeue() (v int16, ok bool) {
+func (q *FIFO16) Dequeue() (int16, bool) {
 	if q.count == 0 {
 		return 0, false
 	}
-	v = q.buf[q.head]
+
+	v := q.buf[q.head]
 	q.head = (q.head + 1) % q.capacity
 	q.count--
+
 	return v, true
 }
 
 // PeekAll calls fn(v) for each element from oldest to newest, without removing.
 func (q *FIFO16) PeekAll(fn func(int16)) {
 	idx := q.head
-	for i := 0; i < q.count; i++ {
+	for range q.count {
 		fn(q.buf[idx])
 		idx = (idx + 1) % q.capacity
 	}
@@ -108,6 +111,7 @@ func reverse(s []int16, from, to int) {
 	if from >= to {
 		return
 	}
+
 	for from < to {
 		s[from], s[to] = s[to], s[from]
 		from++

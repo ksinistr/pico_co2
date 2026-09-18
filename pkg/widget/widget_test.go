@@ -2,9 +2,9 @@ package widget
 
 import (
 	"image/color"
+	"pico_co2/pkg/font"
 	"testing"
 
-	"pico_co2/pkg/font"
 	"tinygo.org/x/drivers"
 )
 

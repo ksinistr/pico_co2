@@ -24,5 +24,6 @@ func SaveTime(rtc RTC, hour, minute int, currentTime time.Time) (time.Time, erro
 	if err := rtc.SetTime(newTime); err != nil {
 		return time.Time{}, fmt.Errorf("rtc set time: %w", err)
 	}
+
 	return newTime, nil
 }

@@ -2,13 +2,13 @@ package app
 
 import (
 	"errors"
-	"testing"
-	"time"
-
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
 	"pico_co2/internal/sensors"
 	"pico_co2/internal/types"
+	"testing"
+	"time"
+
 	"tinygo.org/x/drivers"
 )
 

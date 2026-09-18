@@ -39,6 +39,7 @@ func New(bus drivers.I2C, addr uint16) *Device {
 	if addr == 0 {
 		addr = DefaultAddress
 	}
+
 	return &Device{bus: bus, addr: addr}
 }
 
@@ -48,22 +49,26 @@ func (d *Device) Configure() error {
 	if err := d.write1(regOpMode, ModeReset); err != nil {
 		return err
 	}
+
 	time.Sleep(defaultTimeout)
 
 	// 2. Enter IDLE, clear GPR registers, then go STANDARD.
 	if err := d.write1(regOpMode, ModeIdle); err != nil {
 		return err
 	}
+
 	time.Sleep(defaultTimeout)
 
 	if err := d.write1(regCommand, cmdClrGPR); err != nil {
 		return err
 	}
+
 	time.Sleep(defaultTimeout)
 
 	if err := d.write1(regOpMode, ModeStandard); err != nil {
 		return err
 	}
+
 	time.Sleep(longTimeout)
 
 	return nil
@@ -71,8 +76,8 @@ func (d *Device) Configure() error {
 
 // SetEnvDataMilli sets the ambient temperature and humidity for compensation.
 //
-// tempMilliC is the temperature in milli-degrees Celsius.
-// rhMilliPct is the relative humidity in milli-percent.
+// TempMilliC is the temperature in milli-degrees Celsius.
+// RhMilliPct is the relative humidity in milli-percent.
 func (d *Device) SetEnvDataMilli(tempMilliC, rhMilliPct int32) error {
 	// Clip temperature
 	const (
@@ -100,7 +105,11 @@ func (d *Device) SetEnvDataMilli(tempMilliC, rhMilliPct int32) error {
 	binary.LittleEndian.PutUint16(d.wbuf[1:3], tempRaw)
 	binary.LittleEndian.PutUint16(d.wbuf[3:5], humRaw)
 
-	return d.bus.Tx(d.addr, d.wbuf[:5], nil)
+	if err := d.bus.Tx(d.addr, d.wbuf[:5], nil); err != nil {
+		return fmt.Errorf("ENS160: write environmental data failed: %w", err)
+	}
+
+	return nil
 }
 
 // Update refreshes the concentration measurements.
@@ -110,30 +119,37 @@ func (d *Device) Update(which drivers.Measurement) error {
 	}
 
 	const maxTries = 1000
+
 	var (
 		status   uint8
 		validity uint8
+		gotData  bool
 	)
-	var gotData bool
 
 	// Poll DEVICE_STATUS until NEWDAT or timeout
+
 	for range maxTries {
 		var err error
+
 		status, err = d.read1(regStatus)
 		if err != nil {
 			return err
 		}
+
 		if status&statusSTATER != 0 {
 			return errors.New("ENS160: error (STATER set)")
 		}
+
 		validity = (status & statusValidityMask) >> statusValidityShift
 
 		if status&statusNEWDAT != 0 {
 			gotData = true
 			break // Always break when data available
 		}
+
 		time.Sleep(shortTimeout)
 	}
+
 	if !gotData {
 		return errors.New("ENS160: timeout waiting for NEWDAT")
 	}
@@ -178,7 +194,9 @@ func (d *Device) Wake() error {
 	if err := d.write1(regOpMode, ModeIdle); err != nil {
 		return err
 	}
+
 	time.Sleep(defaultTimeout)
+
 	return nil
 }
 
@@ -187,7 +205,9 @@ func (d *Device) EnableMeasurements() error {
 	if err := d.write1(regOpMode, ModeStandard); err != nil {
 		return err
 	}
+
 	time.Sleep(longTimeout)
+
 	return nil
 }
 
@@ -195,14 +215,20 @@ func (d *Device) EnableMeasurements() error {
 func (d *Device) write1(reg, val uint8) error {
 	d.wbuf[0] = reg
 	d.wbuf[1] = val
-	return d.bus.Tx(d.addr, d.wbuf[:2], nil)
+
+	if err := d.bus.Tx(d.addr, d.wbuf[:2], nil); err != nil {
+		return fmt.Errorf("ENS160: write register 0x%02x failed: %w", reg, err)
+	}
+
+	return nil
 }
 
 // read1 reads a single byte from a register.
 func (d *Device) read1(reg uint8) (uint8, error) {
 	d.wbuf[0] = reg
 	if err := d.bus.Tx(d.addr, d.wbuf[:1], d.rbuf[:1]); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("ENS160: read register 0x%02x failed: %w", reg, err)
 	}
+
 	return d.rbuf[0], nil
 }

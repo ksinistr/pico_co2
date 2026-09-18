@@ -1,0 +1,182 @@
+version: "2"
+
+run:
+  timeout: 3m
+
+linters:
+  default: none
+
+  enable:
+    - misspell
+    - dupword
+    - godot
+
+    - funlen
+    - gocyclo
+    - gocognit
+    - cyclop
+    - revive
+    - gocritic
+    - decorder
+    - dupl
+    - funcorder
+    - goconst
+    - grouper
+    - iface
+    - lll
+    - maintidx
+    - nestif
+    - nolintlint
+    - predeclared
+    - recvcheck
+    - thelper
+    - unparam
+    - whitespace
+    - wsl_v5
+    - nlreturn
+    - nakedret
+    - nonamedreturns
+    - gochecknoglobals
+    - gochecknoinits
+    - interfacebloat
+    - prealloc
+    - intrange
+    - usestdlibvars
+    - unconvert
+    - wastedassign
+    - errname
+
+    - errcheck
+    - errorlint
+    - exhaustive
+    - govet
+    - staticcheck
+    - wrapcheck
+    - bodyclose
+
+  exclusions:
+    paths:
+      - _test\.go
+
+  settings:
+    funlen:
+      lines: 60
+      statements: 40
+
+    gocyclo:
+      min-complexity: 10
+
+    gocognit:
+      min-complexity: 12
+
+    cyclop:
+      max-complexity: 10
+      package-average: 5
+
+    nestif:
+      min-complexity: 3
+
+    varnamelen:
+      max-distance: 5
+      min-name-length: 3
+      ignore-decls:
+        - i int
+        - w io.Writer
+        - r io.Reader
+        - b []byte
+
+    lll:
+      line-length: 120
+
+    nlreturn:
+      block-size: 2
+
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+
+    godot:
+      scope: declarations
+      capital: true
+
+    revive:
+      rules:
+        - name: indent-error-flow
+        - name: unexported-return
+        - name: file-length-limit
+          arguments:
+            - max: 400
+              skip-comments: true
+              skip-blank-lines: true
+        - name: function-length
+          arguments: [40, 60]
+        - name: function-result-limit
+          arguments: [3]
+        - name: max-control-nesting
+          arguments: [3]
+        - name: cognitive-complexity
+          arguments: [12]
+        - name: early-return
+        - name: superfluous-else
+        - name: confusing-naming
+        - name: confusing-results
+        - name: bare-return
+        - name: empty-block
+        - name: empty-lines
+        - name: unnecessary-stmt
+        - name: redefines-builtin-id
+        - name: use-any
+        - name: var-naming
+        - name: receiver-naming
+        - name: context-as-argument
+        - name: import-shadowing
+        - name: deep-exit
+        - name: unused-parameter
+        - name: unused-receiver
+        - name: error-strings
+        - name: error-naming
+        - name: errorf
+        - name: defer
+        - name: range-val-address
+        - name: struct-tag
+        - name: modifies-value-receiver
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - opinionated
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    exhaustive:
+      default-signifies-exhaustive: true
+
+    mnd:
+      ignored-numbers:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "100"
+      ignored-functions:
+        - strconv.Parse*
+        - strconv.Format*
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports

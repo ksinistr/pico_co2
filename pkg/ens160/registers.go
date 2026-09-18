@@ -3,7 +3,7 @@ package ens160
 // DefaultAddress is the default I2C address for the ENS160.
 const DefaultAddress = 0x53
 
-// Registers
+// Registers.
 const (
 	regPartID   = 0x00
 	regOpMode   = 0x10
@@ -22,7 +22,7 @@ const (
 	regGPRRead  = 0x48
 )
 
-// Operating modes
+// Operating modes.
 const (
 	ModeDeepSleep = 0x00
 	ModeIdle      = 0x01
@@ -30,7 +30,7 @@ const (
 	ModeReset     = 0xF0
 )
 
-// Status register bits
+// Status register bits.
 const (
 	statusSTATAS = 1 << 7
 	statusSTATER = 1 << 6
@@ -42,7 +42,7 @@ const (
 	statusNEWGPR = 1 << 0
 )
 
-// Validity flags
+// Validity flags.
 const (
 	ValidityNormalOperation     = 0x00
 	ValidityWarmUpPhase         = 0x01 // need ~3 minutes until valid data
@@ -50,7 +50,7 @@ const (
 	ValidityInvalidOutput       = 0x03
 )
 
-// Commands
+// Commands.
 const (
 	cmdNOP       = 0x00
 	cmdGetAppVer = 0x0E

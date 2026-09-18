@@ -1,10 +1,9 @@
 package types
 
 import (
+	"pico_co2/internal/types/status"
 	"testing"
 	"time"
-
-	"pico_co2/internal/types/status"
 )
 
 func TestCO2TrendCalculation(t *testing.T) {
@@ -56,7 +55,6 @@ func TestCO2TrendCalculation(t *testing.T) {
 			if r.Calculated.CO2Trend != tt.expectedTrend {
 				t.Errorf("Expected trend %v, got %v", tt.expectedTrend, r.Calculated.CO2Trend)
 			}
-
 		})
 	}
 }

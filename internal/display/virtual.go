@@ -26,14 +26,15 @@ func (v *VirtualDisplay) Clear() {
 	}
 }
 
-func (v *VirtualDisplay) SetPixel(x, y int16, color color.RGBA) {
+func (v *VirtualDisplay) SetPixel(x, y int16, pixelColor color.RGBA) {
 	if x >= 0 && x < v.width && y >= 0 && y < v.height {
-		v.buffer[y*v.width+x] = color
+		v.buffer[y*v.width+x] = pixelColor
 	}
 }
 
-func (v *VirtualDisplay) Size() (int16, int16) { return v.width, v.height }
+//nolint:nonamedreturns // The drivers.Displayer interface requires two int16 results.
+func (v *VirtualDisplay) Size() (width, height int16) { return v.width, v.height }
 
-func (v *VirtualDisplay) Display() error { return nil }
+func (*VirtualDisplay) Display() error { return nil }
 
 var _ drivers.Displayer = (*VirtualDisplay)(nil)

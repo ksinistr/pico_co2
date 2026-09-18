@@ -1,4 +1,6 @@
 .PHONY: all flash build size version install_tinygo_edit flash_ens160_example build_ens160_example test-format test-displays test-unit check-images
+# cmd/pico_co2 imports "machine" (TinyGo-only)
+LINT_PKGS = ./internal/... ./pkg/... ./cmd/virtualdisplay
 
 vi:
 	tinygo-edit --target pico --editor nvim --wait
@@ -38,3 +40,14 @@ test-unit:
 
 check-images: test-displays
 	test -z "$$(git status --porcelain -- images/)"
+
+lint:
+	@echo "Running golangci-lint..."
+	golangci-lint run --config .golangci.yaml $(LINT_PKGS)
+
+lint-fix:
+	@echo "Running golangci-lint autofix..."
+	golangci-lint run --fix --config .golangci.yaml $(LINT_PKGS)
+
+lint-fmt:
+	golangci-lint fmt --config .golangci.yaml

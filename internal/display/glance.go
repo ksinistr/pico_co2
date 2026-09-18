@@ -3,12 +3,12 @@ package display
 import (
 	"fmt"
 	"math"
-
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+
 	"tinygo.org/x/drivers"
 )
 
@@ -59,12 +59,14 @@ func GlanceCentered(clockType font.FontType, barHeight int16) func(drivers.Displ
 		if display == nil {
 			return
 		}
+
 		widget.Clear(display)
 
 		small := font.New(display, font.ProggySZ8)
 		glanceClock(display, clockType, r)
 
 		barY := glanceBarY(display, barHeight)
+
 		x := int16(0)
 		for _, cell := range glanceCells(r) {
 			small.Print(x, barY-glanceNumberDrop, cell.text)
@@ -72,7 +74,9 @@ func GlanceCentered(clockType font.FontType, barHeight int16) func(drivers.Displ
 			x += glanceCellWidth + glanceCellGap
 		}
 
-		display.Display()
+		if err := display.Display(); err != nil {
+			return
+		}
 	}
 }
 
@@ -87,12 +91,14 @@ func GlanceLabels(clockType font.FontType, barHeight int16) func(drivers.Display
 		if display == nil {
 			return
 		}
+
 		widget.Clear(display)
 
 		tiny := font.New(display, font.TomThumb)
 		glanceClock(display, clockType, r)
 
 		barY := glanceBarY(display, barHeight)
+
 		x := int16(0)
 		for _, cell := range glanceCells(r) {
 			tiny.Print(x, barY-glanceLabelDrop, cell.label+" "+cell.text)
@@ -100,7 +106,9 @@ func GlanceLabels(clockType font.FontType, barHeight int16) func(drivers.Display
 			x += glanceCellWidth + glanceCellGap
 		}
 
-		display.Display()
+		if err := display.Display(); err != nil {
+			return
+		}
 	}
 }
 
@@ -115,6 +123,7 @@ func GlanceLeft(clockType font.FontType, barHeight int16) func(drivers.Displayer
 		if display == nil {
 			return
 		}
+
 		widget.Clear(display)
 
 		var (
@@ -131,13 +140,16 @@ func GlanceLeft(clockType font.FontType, barHeight int16) func(drivers.Displayer
 			y += glanceRowPitch
 		}
 
-		display.Display()
+		if err := display.Display(); err != nil {
+			return
+		}
 	}
 }
 
 func glanceCells(r *types.Readings) [3]glanceCell {
 	apparentC := status.ApparentTempC(r.Raw.Temperature, r.Raw.Humidity)
 	humidity := float32(math.Round(float64(r.Raw.Humidity)))
+
 	return [3]glanceCell{
 		{
 			label: "CO2",

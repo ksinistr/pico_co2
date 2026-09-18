@@ -3,13 +3,13 @@ package display
 import (
 	"fmt"
 	"math"
-
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+
 	"tinygo.org/x/drivers"
 )
 
@@ -62,7 +62,7 @@ func RenderTime(display drivers.Displayer, r *types.Readings) {
 	// First line
 
 	heatIndex := status.GetHeatIndex(r.Raw.Temperature, r.Raw.Humidity)
-	x = widget.TwoSideBar(display, sf, x, y, int16(heatIndex), "H", 0, 2)
+	widget.TwoSideBar(display, sf, x, y, int16(heatIndex), "H", 0, 2)
 
 	temp := fmt.Sprintf("%.0f", math.Round(float64(r.Raw.Temperature)))
 	hum := fmt.Sprintf("%.0f", math.Round(float64(r.Raw.Humidity)))
@@ -80,11 +80,13 @@ func RenderTime(display drivers.Displayer, r *types.Readings) {
 	default:
 		co2status = 2
 	}
+
 	x = 97
 	widget.TwoSideBar(display, sf, x, y, co2status, "C", 0, 2)
 
 	// second line
 	y = 10
+
 	var lineStr string
 	if r.ClockEdit.Active {
 		lineStr = FormatEditTime(r.ClockEdit.Field, r.ClockEdit.Hour, r.ClockEdit.Minute)
@@ -94,5 +96,7 @@ func RenderTime(display drivers.Displayer, r *types.Readings) {
 		layout.Center(display, lf, y, lineStr)
 	}
 
-	display.Display()
+	if err := display.Display(); err != nil {
+		return
+	}
 }

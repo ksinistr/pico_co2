@@ -3,12 +3,12 @@ package display
 import (
 	"fmt"
 	"math"
-
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
+
 	"tinygo.org/x/drivers"
 )
 
@@ -50,5 +50,7 @@ func RenderBarsWithTrend(display drivers.Displayer, r *types.Readings) {
 		layout.Cell{Face: lf, Text: co2Str, YOffset: -2},
 	)
 
-	display.Display()
+	if err := display.Display(); err != nil {
+		return
+	}
 }

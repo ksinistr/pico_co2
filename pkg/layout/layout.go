@@ -6,9 +6,9 @@
 package layout
 
 import (
+	"pico_co2/pkg/font"
 	"strings"
 
-	"pico_co2/pkg/font"
 	"tinygo.org/x/drivers"
 )
 
@@ -21,6 +21,7 @@ func Center(display drivers.Displayer, face font.Face, y int16, text string) int
 	width, _ := display.Size()
 	x := (width - face.Width(text)) / 2
 	face.Print(x, y, text)
+
 	return x
 }
 
@@ -33,6 +34,7 @@ func Right(display drivers.Displayer, face font.Face, y int16, text string) int1
 	width, _ := display.Size()
 	x := width - face.Width(text)
 	face.Print(x, y, text)
+
 	return x
 }
 
@@ -40,12 +42,20 @@ func Right(display drivers.Displayer, face font.Face, y int16, text string) int1
 //
 //	|left          middle           right|
 //	^             ^                ^
-func Three(display drivers.Displayer, face font.Face, y int16, left, middle, right string) (int16, int16, int16) {
+//
+//nolint:nonamedreturns // Three returns three positions of the same type by design.
+func Three(
+	display drivers.Displayer,
+	face font.Face,
+	y int16,
+	left, middle, right string,
+) (leftX, middleX, rightX int16) {
 	positions := Row(display, y,
 		Cell{Face: face, Text: left},
 		Cell{Face: face, Text: middle},
 		Cell{Face: face, Text: right},
 	)
+
 	return positions[0], positions[1], positions[2]
 }
 
@@ -73,12 +83,15 @@ func Row(display drivers.Displayer, y int16, cells ...Cell) []int16 {
 	if len(cells) == 0 {
 		return nil
 	}
+
 	width, _ := display.Size()
 	positions := make([]int16, len(cells))
+
 	used := int16(0)
 	for _, cell := range cells {
 		used += cellWidth(cell)
 	}
+
 	gap := int16(0)
 	if len(cells) > 1 {
 		gap = (width - used) / int16(len(cells)-1)
@@ -90,6 +103,7 @@ func Row(display drivers.Displayer, y int16, cells ...Cell) []int16 {
 		drawCell(cell, x, y)
 		x += cellWidth(cell) + gap
 	}
+
 	return positions
 }
 
@@ -105,6 +119,7 @@ func Wrap(text string, face font.Face, width int16) []string {
 	if len(words) == 0 {
 		return nil
 	}
+
 	lines := make([]string, 0, len(words))
 	for _, word := range words {
 		parts := splitWord(word, face, width)
@@ -113,15 +128,19 @@ func Wrap(text string, face font.Face, width int16) []string {
 				lines = append(lines, part)
 				continue
 			}
+
 			last := len(lines) - 1
+
 			candidate := lines[last] + " " + part
 			if face.Width(candidate) > width {
 				lines = append(lines, part)
 				continue
 			}
+
 			lines[last] = candidate
 		}
 	}
+
 	return lines
 }
 
@@ -130,12 +149,14 @@ func cellWidth(cell Cell) int16 {
 	if cell.Unit != "" {
 		width += 1 + cell.UnitFace.Width(cell.Unit)
 	}
+
 	return width
 }
 
 func drawCell(cell Cell, x, y int16) {
 	y += cell.YOffset
 	cell.Face.Print(x, y, cell.Text)
+
 	if cell.Unit != "" {
 		cell.UnitFace.Print(x+cell.Face.Width(cell.Text)+1, y+5, cell.Unit)
 	}
@@ -145,15 +166,18 @@ func splitWord(word string, face font.Face, width int16) []string {
 	if width <= 0 || face.Width(word) <= width {
 		return []string{word}
 	}
+
 	parts := make([]string, 0, len(word))
-	for len(word) > 0 {
+	for word != "" {
 		end := 1
 		for end < len(word) && face.Width(word[:end+1]) <= width {
 			end++
 		}
+
 		parts = append(parts, word[:end])
 		word = word[end:]
 	}
+
 	return parts
 }
 
@@ -167,11 +191,13 @@ func splitWord(word string, face font.Face, width int16) []string {
 func LongText(display drivers.Displayer, face font.Face, x, y int16, text string) {
 	width, height := display.Size()
 	lineHeight := face.Height() + 1
+
 	maxLines := int((height - y) / lineHeight)
 	for i, line := range Wrap(text, face, width-x) {
 		if i >= maxLines {
 			return
 		}
+
 		face.Print(x, y+int16(i)*lineHeight, line)
 	}
 }
