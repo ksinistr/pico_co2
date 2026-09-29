@@ -12,15 +12,15 @@ import (
 	"tinygo.org/x/drivers"
 )
 
-// Gauge ranges of the glance screens. The temperature gauge follows the sleep
-// thermal scale, so its fill tracks apparent temperature while the printed
-// number stays the measured one.
+// Gauge ranges of the glance screens. The temperature gauge fill tracks the
+// heat index on the sleep scale while the printed number stays the measured one.
 const (
 	glanceCO2Min      float32 = 800
 	glanceCO2Warn     float32 = 1300
 	glanceCO2Max      float32 = 1400
-	glanceApparentMin float32 = 24
-	glanceApparentMax float32 = status.HotApparentC
+	glanceHeatMin     float32 = 24
+	glanceHeatWarm    float32 = 28
+	glanceHeatMax     float32 = 32
 	glanceHumidityMin float32 = 70
 	glanceHumidityWet float32 = 80
 	glanceHumidityMax float32 = 80
@@ -223,7 +223,7 @@ func GlanceLeftSections(
 }
 
 func glanceCells(r *types.Readings) [3]glanceCell {
-	apparentC := status.ApparentTempC(r.Raw.Temperature, r.Raw.Humidity)
+	heatIndex := status.HeatIndexVal(r.Raw.Temperature, r.Raw.Humidity)
 	humidity := float32(math.Round(float64(r.Raw.Humidity)))
 	dewPoint := status.Dewpoint(float64(r.Raw.Temperature), float64(r.Raw.Humidity))
 
@@ -239,10 +239,10 @@ func glanceCells(r *types.Readings) [3]glanceCell {
 		{
 			label: "T",
 			text:  fmt.Sprintf("%.0fc", math.Round(float64(r.Raw.Temperature))),
-			value: apparentC,
-			min:   glanceApparentMin,
-			max:   glanceApparentMax,
-			mark:  status.WarmApparentC,
+			value: heatIndex,
+			min:   glanceHeatMin,
+			max:   glanceHeatMax,
+			mark:  glanceHeatWarm,
 		},
 		// {
 		// 	label: "RH",
@@ -257,8 +257,8 @@ func glanceCells(r *types.Readings) [3]glanceCell {
 			text:  fmt.Sprintf("%.0f%%", humidity),
 			value: float32(dewPoint),
 			min:   glanceDewPointMin,
-			max:   glanceDewPointWet,
-			mark:  glanceDewPointMax,
+			max:   glanceDewPointMax,
+			mark:  glanceDewPointWet,
 		},
 	}
 }

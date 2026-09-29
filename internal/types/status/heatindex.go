@@ -1,33 +1,35 @@
 package status
 
+import "math"
+
+// HeatIndexVal is the full NWS algorithm: the Steadman average below 80F, the
+// Rothfusz regression with its low and high humidity adjustments above it.
 // https://en.wikipedia.org/wiki/Heat_index#Formula
 func HeatIndexVal(tempC, rh float32) float32 {
-	if tempC < 27.0 {
-		return tempC
+	t := float64(tempC)*9/5 + 32
+	r := float64(rh)
+
+	simple := 0.5 * (t + 61 + (t-68)*1.2 + r*0.094)
+	if (simple+t)/2 < 80 {
+		return fahrenheitToC(simple)
 	}
 
-	T := tempC
-	R := rh
+	hi := -42.379 + 2.04901523*t + 10.14333127*r -
+		0.22475541*t*r - 0.00683783*t*t - 0.05481717*r*r +
+		0.00122874*t*t*r + 0.00085282*t*r*r - 0.00000199*t*t*r*r
 
-	T2 := tempC * tempC
-	R2 := rh * rh
+	switch {
+	case r < 13 && t >= 80 && t <= 112:
+		hi -= (13 - r) / 4 * math.Sqrt((17-math.Abs(t-95))/17)
+	case r > 85 && t >= 80 && t <= 87:
+		hi += (r - 85) / 10 * (87 - t) / 5
+	}
 
-	// coefficients for °C
-	const (
-		c1 float32 = -8.78469475556
-		c2 float32 = 1.61139411
-		c3 float32 = 2.33854883889
-		c4 float32 = -0.14611605
-		c5 float32 = -0.012308094
-		c6 float32 = -0.0164248277778
-		c7 float32 = 0.002211732
-		c8 float32 = 0.00072546
-		c9 float32 = -0.000003582
-	)
+	return fahrenheitToC(hi)
+}
 
-	resultC := c1 + c2*T + c3*R + c4*T*R + c5*T2 + c6*R2 + c7*T2*R + c8*T*R2 + c9*T2*R2
-
-	return resultC
+func fahrenheitToC(f float64) float32 {
+	return float32((f - 32) * 5 / 9)
 }
 
 type HeatIndex uint8
