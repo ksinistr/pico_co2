@@ -5,3 +5,8 @@
 
 # ralphex progress logs
 .ralphex/progress/
+.agents/
+.claude/
+.codex
+.mockups/
+.pi/

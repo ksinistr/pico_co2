@@ -59,17 +59,17 @@ func sampleReadings(historyInterval time.Duration) *types.Readings {
 		radians := float64(i) * 2 * math.Pi / types.DefaultHistoryCapacity
 		readings.AddReadingsAt(
 			now.Add(time.Duration(i)*historyInterval),
-			uint16(1200+300*math.Sin(radians)),
-			float32(25+2*math.Sin(radians)),
-			float32(50+10*math.Sin(radians)),
+			uint16(1000+300*math.Sin(radians)),
+			float32(24+2*math.Sin(radians)),
+			float32(60+10*math.Sin(radians)),
 		)
 	}
 
 	readings.AddReadingsAt(
 		now.Add(types.DefaultHistoryCapacity*historyInterval),
-		1200,
-		29,
-		55,
+		1063,
+		27,
+		60,
 	)
 
 	return readings
@@ -161,7 +161,6 @@ func renderThermalGallery() error {
 	items := make([]galleryItem, 0, 6)
 
 	for _, value := range []float32{20, 24, 28, 32, 36, 40} {
-		value := value
 		items = append(items, galleryItem{
 			name: fmt.Sprintf("gallery/thermal-%02d", int(value)),
 			draw: func(device *display.VirtualDisplay) {
@@ -182,7 +181,6 @@ func renderBarGallery() error {
 	items := make([]galleryItem, 0, 3)
 
 	for _, value := range []int16{-3, 0, 3} {
-		value := value
 		items = append(items, galleryItem{
 			name: fmt.Sprintf("gallery/bar-%d", value),
 			draw: func(device *display.VirtualDisplay) {
@@ -203,7 +201,6 @@ func renderTrendGallery() error {
 		widget.TrendFalling,
 		widget.TrendUnknown,
 	} {
-		direction := direction
 		items = append(items, galleryItem{
 			name: fmt.Sprintf("gallery/trend-%d", direction),
 			draw: func(device *display.VirtualDisplay) {
@@ -220,19 +217,19 @@ func renderBlockGallery() error {
 		{
 			name: "gallery/square-bar",
 			draw: func(device *display.VirtualDisplay) {
-				widget.SquareBar(device, 0, 12, 3)
+				widget.SquareBar(device, 0, 12, 30, 6, 2, 10, 27, 25, 28, 32)
 			},
 		},
 		{
 			name: "gallery/square-bar-empty",
 			draw: func(device *display.VirtualDisplay) {
-				widget.SquareBar(device, 0, 12, 0)
+				widget.SquareBar(device, 0, 12, 30, 6, 2, 10, 21, 25, 28, 32)
 			},
 		},
 		{
 			name: "gallery/square-bar-full",
 			draw: func(device *display.VirtualDisplay) {
-				widget.SquareBar(device, 0, 12, 4)
+				widget.SquareBar(device, 0, 12, 30, 6, 2, 10, 33, 25, 28, 32)
 			},
 		},
 		{
@@ -263,7 +260,6 @@ func renderTextGallery() error {
 		"short",
 		"a deliberately long message that wraps over the display width",
 	} {
-		text := text
 		items = append(items, galleryItem{
 			name: "gallery/text-" + fmt.Sprintf("%d", len(text)),
 			draw: func(device *display.VirtualDisplay) {

@@ -9,6 +9,15 @@ func ApparentTempC(tempC, rh float32) float32 {
 	return tempC + 0.33*VaporPressureHPA(tempC, rh) - 4
 }
 
+func Dewpoint(tempC, rh float64) float64 {
+	a := 17.62
+	b := 243.12
+	h := math.Log(rh/100) + (a*tempC)/(b+tempC)
+	dewpoint := b * h / (a - h)
+
+	return dewpoint
+}
+
 func VaporPressureHPA(tempC, rh float32) float32 {
 	if rh < 1 {
 		rh = 1

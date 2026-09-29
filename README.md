@@ -103,6 +103,9 @@ Why the displayed numbers and thresholds are what they are, with sources:
 - [docs/sleep-bedding.md](docs/sleep-bedding.md) - what "comfort up to 29 °C" requires in
   practice: bedding insulation in clo and tog, coverage, airflow, and how to run an air
   conditioned room whose doors have to stay shut.
+- [docs/sleep-thresholds.md](docs/sleep-thresholds.md) - evidence-based operating points for
+  CO₂, apparent temperature and relative humidity, including the distinction between early
+  warning values and strong action values.
 
 ## Case
 

@@ -200,13 +200,15 @@ func ThermalScale(display drivers.Displayer, y, height int16, value float32, sca
 //	min          value                    max
 //	 |###############|______________________|
 //	 x                                 x+width
-func Gauge(display drivers.Displayer, x, y, width, height int16, value, lower, upper float32) {
+func Gauge(display drivers.Displayer, x, y, width, height int16, value, lower, upper float32, withBase bool) {
 	if display == nil || width <= 0 || height <= 0 {
 		return
 	}
 
-	if err := tinydraw.FilledRectangle(display, x, y+height-1, width, 1, whiteColor()); err != nil {
-		return
+	if withBase {
+		if err := tinydraw.FilledRectangle(display, x, y+height-1, width, 1, whiteColor()); err != nil {
+			return
+		}
 	}
 
 	filled := ScaleX(width, value, lower, upper)
@@ -287,40 +289,65 @@ func Sparkline(display drivers.Displayer, x, y, width, height int16, data []int1
 	}
 }
 
-// SquareBar draws four horizontal blocks and fills the first value blocks.
+// SquareBar draws horizontal filled blocks from left to right according to value.
 // A zero value draws nothing.
-// It is retained as a reusable gallery figure; active screens do not use it.
-//
-//	value=3
-//	+-----+  +-----+  +-----+  +-----+
-//	|#####|  |#####|  |#####|  |     |
-//	+-----+  +-----+  +-----+  +-----+
-func SquareBar(display drivers.Displayer, x, y int16, value uint8) {
-	if value == 0 {
+func SquareBar(
+	display drivers.Displayer,
+	x, y, width, barHeight, barWidth, barGap int16,
+	value, lower, _, upper float32,
+) {
+	if !validSquareBar(display, width, barHeight, barWidth, barGap, value, lower, upper) {
 		return
 	}
 
-	const width, height, gap int16 = (128 - 6*3) / 4, 9, 6
-	for i := range int16(4) {
-		if err := drawSquare(display, x, y, width, height, i < int16(value)); err != nil {
+	step := int32(barWidth) + int32(barGap)
+	sectionCount := int32(width) / step
+
+	if sectionCount <= 0 {
+		return
+	}
+
+	filledSections := sectionCount
+	if value < upper && sectionCount > 1 {
+		filledSections = min(sectionCount-1, 1+int32(squareBarValuePercent(value, lower, upper)*float32(sectionCount-1)))
+	}
+
+	for i := range filledSections {
+		offset := i * step
+
+		if err := drawSquare(display, x+int16(offset), y, barWidth, barHeight); err != nil {
 			return
 		}
-
-		x += width + gap
 	}
 }
 
-func drawSquare(display drivers.Displayer, x, y, width, height int16, filled bool) error {
-	if filled {
-		if err := tinydraw.FilledRectangle(display, x, y, width, height, whiteColor()); err != nil {
-			return fmt.Errorf("fill square: %w", err)
-		}
-
-		return nil
+func validSquareBar(
+	display drivers.Displayer,
+	width, barHeight, barWidth, barGap int16,
+	value, lower, upper float32,
+) bool {
+	if display == nil || value == 0 {
+		return false
 	}
 
-	if err := tinydraw.Rectangle(display, x, y, width, height, whiteColor()); err != nil {
-		return fmt.Errorf("draw square: %w", err)
+	if width <= 0 || barHeight <= 0 || barWidth <= 0 || barGap < 0 {
+		return false
+	}
+
+	return value >= lower && upper > lower
+}
+
+func squareBarValuePercent(value, lower, upper float32) float32 {
+	if value >= upper {
+		return 1
+	}
+
+	return (value - lower) / (upper - lower)
+}
+
+func drawSquare(display drivers.Displayer, x, y, width, height int16) error {
+	if err := tinydraw.FilledRectangle(display, x, y, width, height, whiteColor()); err != nil {
+		return fmt.Errorf("fill square: %w", err)
 	}
 
 	return nil
