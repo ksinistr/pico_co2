@@ -42,9 +42,9 @@ func TestTickReadsSensorsOnSchedule(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			reads := 0
-			deps := testDependencies(&fakeRTC{now: now}, func() (sensors.Raw, error) {
+			deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
 				reads++
-				return sensors.Raw{CO2: 800, Temperature: 24, Humidity: 50}, nil
+				return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
 			})
 			state := New(deps, 16)
 			for _, offset := range tt.steps {
@@ -120,7 +120,7 @@ func TestTickInputAndSave(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			left, right := false, false
 			clock := &fakeRTC{now: now}
-			deps := testDependencies(clock, func() (sensors.Raw, error) { return sensors.Raw{}, nil })
+			deps := testDependencies(clock, func() ([]types.Measurement, error) { return []types.Measurement{{Type: types.MeasurementTypeCO2}}, nil })
 			deps.LeftPressed = func() bool { value := left; left = false; return value }
 			deps.RightPressed = func() bool { value := right; right = false; return value }
 			state := New(deps, 16)
@@ -135,12 +135,12 @@ func TestTickInputAndSave(t *testing.T) {
 func TestTickRecoversFromSensorError(t *testing.T) {
 	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
 	reads := 0
-	deps := testDependencies(&fakeRTC{now: now}, func() (sensors.Raw, error) {
+	deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
 		reads++
 		if reads == 1 {
-			return sensors.Raw{}, errors.New("sensor unavailable")
+			return nil, errors.New("sensor unavailable")
 		}
-		return sensors.Raw{CO2: 800, Temperature: 24, Humidity: 50}, nil
+		return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
 	})
 	state := New(deps, 16)
 	state.Tick(now)
@@ -153,11 +153,11 @@ func TestTickRecoversFromSensorError(t *testing.T) {
 	}
 }
 
-func TestTickKeepsEditorVisibleWhenSensorsFail(t *testing.T) {
+func TestTickShowsErrorWhenSensorsFail(t *testing.T) {
 	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
 	rendered := false
-	deps := testDependencies(&fakeRTC{now: now}, func() (sensors.Raw, error) {
-		return sensors.Raw{}, errors.New("sensor unavailable")
+	deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
+		return nil, errors.New("sensor unavailable")
 	})
 	deps.Screens[0].Render = func(drivers.Displayer, *types.Readings) { rendered = true }
 	monitor := New(deps, 16)
@@ -165,20 +165,23 @@ func TestTickKeepsEditorVisibleWhenSensorsFail(t *testing.T) {
 
 	monitor.Tick(now)
 
-	if !rendered {
-		t.Fatal("editor screen was not rendered")
+	if rendered || monitor.readings.Error == "" {
+		t.Fatal("sensor error did not override editor")
 	}
 }
 
-func testDependencies(clock *fakeRTC, read sensors.Reader) Deps {
+func testDependencies(clock *fakeRTC, read readerFunc) Deps {
 	return Deps{
 		Display: display.NewVirtualDisplay(128, 32),
 		Screens: []display.Screen{
 			{ID: "time", AllowsClockEdit: true, Render: func(drivers.Displayer, *types.Readings) {}},
 			{ID: "second", Render: func(drivers.Displayer, *types.Readings) {}},
 		},
-		RTC:  clock,
-		Read: read,
+		RTC: clock,
+		Sensors: []Registration{
+			{ID: "test", Reader: read, Capabilities: []types.MeasurementType{types.MeasurementTypeCO2}, Interval: time.Minute, StartupInterval: time.Second, StartupWindow: time.Minute},
+			{ID: "rtc", Reader: sensors.Clock{Source: clock}, Capabilities: []types.MeasurementType{types.MeasurementTypeTime}, Interval: time.Second},
+		},
 		Schedule: Schedule{
 			TimeReadInterval:       time.Second,
 			StartupReadInterval:    time.Second,
@@ -187,5 +190,56 @@ func testDependencies(clock *fakeRTC, read sensors.Reader) Deps {
 			HistoryInterval:        time.Minute,
 			SimultaneousPressDelay: 400 * time.Millisecond,
 		},
+	}
+}
+
+type readerFunc func() ([]types.Measurement, error)
+
+func (f readerFunc) Read() ([]types.Measurement, error) { return f() }
+
+type countedDisplay struct {
+	*display.VirtualDisplay
+	sends int
+}
+
+func (d *countedDisplay) Display() error { d.sends++; return nil }
+
+func TestTickFrameChanges(t *testing.T) {
+	now := time.Date(2026, 10, 21, 14, 23, 0, 0, time.UTC)
+	clock := &fakeRTC{now: now}
+	target := &countedDisplay{VirtualDisplay: display.NewVirtualDisplay(128, 32)}
+	failing := false
+	deps := testDependencies(clock, func() ([]types.Measurement, error) {
+		if failing {
+			return nil, errors.New("disconnected")
+		}
+		return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
+	})
+	deps.Display = target
+	deps.Screens[0].Render = display.RenderTime
+	deps.Sensors[0].Interval = time.Second
+	state := New(deps, 16)
+	for _, tt := range []struct {
+		name   string
+		offset time.Duration
+		fail   bool
+		minute int
+		sends  int
+	}{
+		{"initial", 0, false, 23, 1},
+		{"new sample same pixels", time.Second, false, 23, 1},
+		{"clock changed", 2 * time.Second, false, 24, 2},
+		{"error appears", 3 * time.Second, true, 24, 3},
+		{"same error stays", 4 * time.Second, true, 24, 3},
+		{"recovery", 5 * time.Second, false, 24, 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			failing = tt.fail
+			clock.now = time.Date(2026, 10, 21, 14, tt.minute, 0, 0, time.UTC)
+			state.Tick(now.Add(tt.offset))
+			if target.sends != tt.sends {
+				t.Fatalf("display sends=%d want=%d", target.sends, tt.sends)
+			}
+		})
 	}
 }

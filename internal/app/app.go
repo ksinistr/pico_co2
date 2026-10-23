@@ -5,8 +5,8 @@ import (
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
 	"pico_co2/internal/rtc"
-	"pico_co2/internal/sensors"
 	"pico_co2/internal/types"
+	"slices"
 	"time"
 
 	"tinygo.org/x/drivers"
@@ -36,7 +36,7 @@ type Deps struct {
 	Display      drivers.Displayer
 	Screens      []display.Screen
 	RTC          rtc.RTC
-	Read         sensors.Reader
+	Sensors      []Registration
 	LeftPressed  func() bool
 	RightPressed func() bool
 	Schedule     Schedule
@@ -49,6 +49,8 @@ type App struct {
 	editor        clockedit.EditorState
 	lastLeftTime  time.Time
 	lastRightTime time.Time
+	collector     *Collector
+	snapshot      types.Measurements
 }
 
 func New(deps Deps, queueCapacity int) *App {
@@ -58,8 +60,12 @@ func New(deps Deps, queueCapacity int) *App {
 
 	deps.Schedule = scheduleWithDefaults(deps.Schedule)
 
+	output := display.NewFrameDisplay(deps.Display)
+	deps.Display = output
+
 	return &App{
-		deps: deps,
+		collector: NewCollector(deps.Sensors, queueCapacity, deps.Schedule.HistoryInterval),
+		deps:      deps,
 		readings: types.InitReadings(
 			queueCapacity,
 			deps.Schedule.HistoryInterval,
@@ -123,12 +129,11 @@ func (a *App) handleInput(now time.Time) bool {
 	current := a.currentScreen()
 	result := clockedit.ProcessInput(a.editor, clockedit.ButtonEvent{
 		LeftPressed: left, RightPressed: right, LeftTime: a.lastLeftTime, RightTime: a.lastRightTime,
-	}, current.AllowsClockEdit, a.deps.Schedule.SimultaneousPressDelay)
+	}, current.AllowsClockEdit && a.deps.RTC != nil, a.deps.Schedule.SimultaneousPressDelay)
 
 	if result.AttemptEntry {
 		a.editor = clockedit.Enter(a.readings.Time.Hour, a.readings.Time.Minute)
 		a.resetButtonTimes()
-		a.readings.IsDrawen = false
 
 		return true
 	}
@@ -141,7 +146,6 @@ func (a *App) handleInput(now time.Time) bool {
 		}
 
 		a.resetButtonTimes()
-		a.readings.IsDrawen = false
 
 		return true
 	}
@@ -155,10 +159,6 @@ func (a *App) handleInput(now time.Time) bool {
 	if result.NavRight {
 		a.screen = (a.screen + 1) % len(a.deps.Screens)
 		a.lastRightTime = time.Time{}
-	}
-
-	if result.RedrawNeeded {
-		a.readings.IsDrawen = false
 	}
 
 	return false
@@ -185,89 +185,49 @@ func (a *App) save(clock rtc.RTC, editor clockedit.EditorState, now time.Time) {
 	a.readings.Time.Minute = updated.Minute()
 	a.readings.Time.LastRead = now
 	a.readings.Error = ""
+	a.collector.Invalidate(types.MeasurementTypeTime)
 }
 
 func (a *App) updateReadings(now time.Time) {
-	a.updateClock(now)
-
-	if !a.shouldReadSensors(now) {
-		return
-	}
-
-	raw, err := a.deps.Read()
+	values, err := a.collector.Read(now)
 	if err != nil {
 		a.readings.Error = err.Error()
-		a.readings.IsDrawen = false
-
 		return
 	}
 
-	a.readings.AddReadingsAt(now, raw.CO2, raw.Temperature, raw.Humidity)
-	a.readings.IsDrawen = false
-}
-
-func (a *App) updateClock(now time.Time) {
-	if !a.clockReadDue(now) {
+	a.readings.Error = ""
+	if slices.Equal(a.snapshot, values) {
 		return
 	}
 
-	current, err := a.deps.RTC.ReadTime()
-	if err != nil {
-		a.readings.Error = fmt.Sprintf("DS3231: %v", err)
-		a.readings.IsDrawen = false
-
-		return
-	}
-
-	a.readings.Time.LastRead = now
-	if a.readings.Time.Hour == current.Hour() && a.readings.Time.Minute == current.Minute() {
-		return
-	}
-
-	a.readings.Time.Hour = current.Hour()
-	a.readings.Time.Minute = current.Minute()
-	a.readings.IsDrawen = false
-}
-
-func (a *App) clockReadDue(now time.Time) bool {
-	return a.readings.Time.LastRead.IsZero() ||
-		now.Sub(a.readings.Time.LastRead) >= a.deps.Schedule.TimeReadInterval
-}
-
-func (a *App) shouldReadSensors(now time.Time) bool {
-	if a.readings.LastUpdateAt.IsZero() {
-		return true
-	}
-
-	elapsed := now.Sub(a.readings.LastUpdateAt)
-	if now.Sub(a.readings.FirstReadingAt) < a.deps.Schedule.StartupWindow {
-		return elapsed >= a.deps.Schedule.StartupReadInterval
-	}
-
-	return elapsed >= a.deps.Schedule.SensorReadInterval
+	a.snapshot = values
+	a.readings.Measurements = values.Grouped()
+	a.readings.SensorHistory = a.collector.History
+	a.readings.Project()
 }
 
 func (a *App) render() {
-	if a.readings.IsDrawen {
-		return
-	}
-
 	a.readings.ClockEdit = types.ClockEdit{
 		Active: a.editor.Active,
 		Field:  a.editor.Field,
 		Hour:   a.editor.Hour,
 		Minute: a.editor.Minute,
 	}
+
+	current := a.currentScreen()
+	for _, kind := range current.Required {
+		if _, ok := a.readings.Measurements[kind].First(); !ok && a.readings.Error == "" {
+			display.RenderError(a.deps.Display, fmt.Sprintf("No %s measurement", kind))
+			return
+		}
+	}
+
 	switch {
-	case a.editor.Active:
-		a.currentScreen().Render(a.deps.Display, a.readings)
 	case a.readings.Error != "":
-		display.RenderError(a.deps.Display, a.readings)
+		display.RenderError(a.deps.Display, a.readings.Error)
 	default:
 		a.currentScreen().Render(a.deps.Display, a.readings)
 	}
-
-	a.readings.IsDrawen = true
 }
 
 func (a *App) currentScreen() display.Screen {

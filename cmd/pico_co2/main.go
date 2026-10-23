@@ -31,29 +31,66 @@ func main() {
 	device.Command(ssd1306.SETVCOMDETECT)
 	device.Command(0x30)
 
-	reader, err := sensors.New(machine.I2C0)
-	if err != nil {
-		println("sensors init:", err.Error())
-		return
-	}
-
 	clock := ds3231.New(machine.I2C0)
 	if ok := clock.Configure(); !ok {
-		println("failed to configure DS3231 sensor")
+		display.RenderError(&device, "failed to configure DS3231 sensor")
 		return
 	}
 	initializeClock(&clock)
 
 	left := NewTouchButton(machine.GP10)
 	right := NewTouchButton(machine.GP11)
+	schedule := app.DefaultSchedule()
+	aht, err := sensors.NewAHT20(machine.I2C0)
+	if err != nil {
+		display.RenderError(&device, err.Error())
+		return
+	}
+	scd, err := sensors.NewSCD4x(machine.I2C0)
+	if err != nil {
+		display.RenderError(&device, err.Error())
+		return
+	}
+	registrations := []app.Registration{
+		{
+			ID:       "aht20",
+			Priority: 2,
+			Capabilities: []types.MeasurementType{
+				types.MeasurementTypeTemperature, types.MeasurementTypeHumidity,
+			},
+			Reader:          aht,
+			Interval:        schedule.SensorReadInterval,
+			StartupInterval: schedule.StartupReadInterval,
+			StartupWindow:   schedule.StartupWindow,
+		},
+		{
+			ID:       "scd4x",
+			Priority: 0,
+			Capabilities: []types.MeasurementType{
+				types.MeasurementTypeCO2, types.MeasurementTypeTemperature, types.MeasurementTypeHumidity,
+			},
+			Reader:          scd,
+			Interval:        schedule.SensorReadInterval,
+			StartupInterval: schedule.StartupReadInterval,
+			StartupWindow:   schedule.StartupWindow,
+		},
+		{
+			ID:           "ds3231",
+			Priority:     1,
+			Capabilities: []types.MeasurementType{types.MeasurementTypeTime},
+			Reader:       sensors.Clock{Source: &clock},
+			Interval:     schedule.TimeReadInterval,
+		},
+	}
+
 	monitor := app.New(app.Deps{
 		Display:      &device,
 		Screens:      display.ActiveScreens(),
 		RTC:          &clock,
-		Read:         reader.Read,
+		Sensors:      registrations,
 		LeftPressed:  left.Consume,
 		RightPressed: right.Consume,
-		Schedule:     app.DefaultSchedule(),
+		Schedule:     schedule,
 	}, types.DefaultHistoryCapacity)
 
 	watchdog := machine.Watchdog

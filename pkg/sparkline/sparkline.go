@@ -150,6 +150,7 @@ func constantSeries(length int, value int16) []int16 {
 
 func resample(values []int16, outputLength, height int) []int16 {
 	result := make([]int16, outputLength)
+
 	if len(values) <= 1 {
 		value := int16(height / 2)
 		if len(values) == 1 {

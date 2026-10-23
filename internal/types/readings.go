@@ -9,12 +9,13 @@ import (
 )
 
 type Readings struct {
+	Measurements   MeasurementsByType
+	SensorHistory  map[MeasurementKey]*fifo.FIFO16
 	Raw            RawReadings
 	Calculated     CalculatedReadings
 	History        MeasurementHistory
 	FirstReadingAt time.Time
 	LastUpdateAt   time.Time
-	IsDrawen       bool
 	Error          string
 	Time           Time
 	ClockEdit      ClockEdit
@@ -133,4 +134,9 @@ func averageCO2(readings []int16) uint16 {
 	}
 
 	return uint16(sum / uint32(len(readings)))
+}
+
+type MeasurementKey struct {
+	SensorID string
+	Type     MeasurementType
 }

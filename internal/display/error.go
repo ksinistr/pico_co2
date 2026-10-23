@@ -1,7 +1,6 @@
 package display
 
 import (
-	"pico_co2/internal/types"
 	"pico_co2/pkg/font"
 	"pico_co2/pkg/layout"
 	"pico_co2/pkg/widget"
@@ -14,7 +13,7 @@ import (
 //	scd4x read: i2c
 //	timeout while
 //	reading sensor
-func RenderError(display drivers.Displayer, r *types.Readings) {
+func RenderError(display drivers.Displayer, errMsg string) {
 	if display == nil {
 		return
 	}
@@ -22,11 +21,7 @@ func RenderError(display drivers.Displayer, r *types.Readings) {
 	widget.Clear(display)
 	face := font.New(display, font.ProggySZ8)
 
-	if r != nil && r.Error != "" {
-		layout.LongText(display, face, 0, 0, r.Error)
-	} else {
-		layout.LongText(display, face, 0, 0, "No error message available")
-	}
+	layout.LongText(display, face, 0, 0, errMsg)
 
 	if err := display.Display(); err != nil {
 		return

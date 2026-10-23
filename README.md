@@ -121,6 +121,41 @@ The program has three small boundaries:
 - `internal/app` owns state and one testable `Tick`.
 - `pkg/font`, `pkg/widget`, and `pkg/layout` provide reusable drawing pieces; `internal/display` composes the active screens.
 
+### Adding a sensor
+
+Implement `sensors.Reader`: `Read() ([]types.Measurement, error)`. An adapter
+returns measurement types and values in shared units: temperature in °C,
+relative humidity in percent, CO₂ in ppm, and time as Unix seconds (UTC).
+It returns all declared capabilities in one read and reports hardware failures
+through the error result.
+
+Initialize the hardware in `cmd/pico_co2` and add an `app.Registration` with a
+unique instance ID, priority, capabilities, reader, and polling interval.
+Register multiple instances of the same model with different IDs. Smaller
+priority numbers win; ties retain registration order. Only registered sensors
+are active. Optional startup intervals belong to each registration.
+
+`Collector` stamps readings with their source, priority, and acquisition times.
+It produces a `[]Measurement`; `Grouped()` provides
+`map[MeasurementType]Measurements` with each group sorted by priority.
+A read failure stops collection immediately and shows the source ID and error
+on screen, including during clock editing. The error stays visible until the
+failed source is retried successfully at its configured interval.
+
+History is bounded by the configured capacity for each `(SensorID, Type)` pair.
+Existing screens use `Readings` as a projection of the highest priority values
+and their corresponding histories. New screens can access every source through
+`Readings.Measurements` and `Readings.SensorHistory`. Required measurement types
+are declared on `display.Screen`; missing data produces an explicit message.
+
+RTC reading uses the same registration and collection path as other sensors.
+Clock editing writes through the separately injected `Deps.RTC`; it must refer
+to the RTC selected for display. Saving invalidates cached time readings.
+
+`FrameDisplay` fingerprints the rendered pixels and sends only changed frames.
+This includes formatting, history, navigation, errors, and clock editing without
+a manual redraw flag. Failed transfers are retried on subsequent ticks.
+
 Display errors are intentionally ignored: there is no useful recovery path for
 a failed OLED transfer, and the watchdog restarts the board if the loop stops.
 The image baseline was regenerated after the rendering refactor because the

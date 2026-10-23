@@ -94,7 +94,7 @@ func renderScreens(readings *types.Readings) error {
 	if err := render(
 		"error",
 		func(device *display.VirtualDisplay) {
-			display.RenderError(device, &errorReadings)
+			display.RenderError(device, errorReadings.Error)
 		},
 	); err != nil {
 		return err
