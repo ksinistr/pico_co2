@@ -1,0 +1,31 @@
+package main
+
+import (
+	"pico_co2/internal/config"
+	"pico_co2/internal/hardware/pico"
+)
+
+func main() {
+	aht20 := &config.Sensor{Model: config.AHT20, Bus: config.I2C0}
+	ens160 := &config.Sensor{Model: config.ENS160, Bus: config.I2C0}
+	cfg := config.Config{
+		I2C: []config.I2C{
+			{Controller: config.I2C0, SDA: 4, SCL: 5, Frequency: 400000},
+		},
+		Display: config.Display{
+			Model:  config.SSD1306,
+			I2C:    &config.I2CDisplay{Bus: config.I2C0},
+			Width:  128,
+			Height: 32,
+		},
+		Temperature: aht20,
+		Humidity:    aht20,
+		CO2:         ens160,
+		RTC:         &config.RTC{Model: config.DS3231, Bus: config.I2C0},
+		Buttons:     &config.Buttons{Left: 10, Right: 11},
+	}
+
+	if err := pico.Run(cfg); err != nil {
+		println("device init:", err.Error())
+	}
+}

@@ -1,6 +1,6 @@
 .PHONY: all flash build size version install_tinygo_edit test-format test-displays test-unit check-images render-architecture
 # The device command and internal/platform require TinyGo.
-DEVICE ?= pico_co2
+DEVICE ?= pico_scd40
 TARGET ?= pico
 
 LINT_PKGS = ./internal/... ./pkg/... ./cmd/virtualdisplay

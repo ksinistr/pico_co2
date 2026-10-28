@@ -44,7 +44,7 @@ func EasyRead(display drivers.Displayer, view *types.ViewState) {
 	var (
 		hourMinuteString = hourStr + ":" + minuteStr
 		// hourMinuteStringWidth = timeBold.Width(hourMinuteString)
-		co2      = strconv.Itoa(int(view.Readings.CO2.Value))
+		co2      = readingText(view.Readings.CO2, "")
 		humidity = strconv.Itoa(int(view.Readings.Humidity.Value))
 		temp     = strconv.Itoa(
 			int(view.Readings.Temperature.Value),
@@ -70,7 +70,7 @@ func EasyRead(display drivers.Displayer, view *types.ViewState) {
 	// small.Print(temperatureWidth, height/2, humidity)
 	// apparent temperature
 
-	xsmall.Print(width-apparentCWidth-xsmall.Width("AT "), height-xsmall.Height()-1, "AT ")
+	// xsmall.Print(width-apparentCWidth-xsmall.Width("AT "), height-xsmall.Height()-1, "AT ")
 	small.Print(width-apparentCWidth, height/2+4, apparentCStr)
 
 	display.Display()

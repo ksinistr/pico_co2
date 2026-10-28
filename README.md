@@ -10,7 +10,7 @@ Below are examples of the different display themes available:
 
 **Main Display**
 
-![Main Display](images/time-normal.png)
+![Main Display](images/easyread-normal.png)
 
 **CO2 Graph Display**
 
@@ -30,6 +30,8 @@ Below are examples of the different display themes available:
 - Source of current time:
     * DS3231
 - Touch buttons (2x)
+
+[Read more here](docs/hardware.md).
 
 ## Software installation
 
@@ -56,3 +58,10 @@ make test-displays
 ```
 
 This regenerates the active screens and `images/gallery/`, then lists image changes for visual review.
+
+## Alternatives
+
+- https://aranet.com/en/home/products/aranet4-home
+- https://www.newentor.com/products/co-monitor-c1
+- https://unni.store/products/co2-monitor-carbon-dioxide-detector-0601
+- https://www.ikea.com/ph/en/p/alpstuga-air-quality-sensor-smart-70609377/
