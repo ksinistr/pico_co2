@@ -45,37 +45,41 @@ func run() error {
 	return nil
 }
 
-func sampleReadings(historyInterval time.Duration) *types.Readings {
-	readings := types.InitReadings(
-		types.DefaultHistoryCapacity,
-		historyInterval,
-	)
+func sampleReadings(historyInterval time.Duration) *types.ViewState {
+	history := types.NewHistory(types.DefaultHistoryCapacity, historyInterval)
+	view := &types.ViewState{
+		History: history,
+	}
 	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
-	readings.Time.LastRead = now
-	readings.Time.Hour = 14
-	readings.Time.Minute = 23
+	view.Time = types.Time{Hour: 14, Minute: 23, LastRead: now}
 
 	for i := range types.DefaultHistoryCapacity {
 		radians := float64(i) * 2 * math.Pi / types.DefaultHistoryCapacity
-		readings.AddReadingsAt(
-			now.Add(time.Duration(i)*historyInterval),
-			uint16(1000+300*math.Sin(radians)),
-			float32(24+2*math.Sin(radians)),
-			float32(60+10*math.Sin(radians)),
-		)
+		at := now.Add(time.Duration(i) * historyInterval)
+		co2 := float64(uint16(1000 + 300*math.Sin(radians)))
+		temperature := float64(float32(24 + 2*math.Sin(radians)))
+		humidity := float64(float32(60 + 10*math.Sin(radians)))
+		view.Readings = types.Readings{
+			CO2:         types.Reading{Value: co2, UpdatedAt: at, State: types.ReadingReady},
+			Temperature: types.Reading{Value: temperature, UpdatedAt: at, State: types.ReadingReady},
+			Humidity:    types.Reading{Value: humidity, UpdatedAt: at, State: types.ReadingReady},
+		}
+		history.Add(view.Readings)
 	}
 
-	readings.AddReadingsAt(
-		now.Add(types.DefaultHistoryCapacity*historyInterval),
-		1063,
-		27,
-		60,
-	)
+	at := now.Add(types.DefaultHistoryCapacity * historyInterval)
+	view.Readings = types.Readings{
+		CO2:         types.Reading{Value: 1063, UpdatedAt: at, State: types.ReadingReady},
+		Temperature: types.Reading{Value: 27, UpdatedAt: at, State: types.ReadingReady},
+		Humidity:    types.Reading{Value: 60, UpdatedAt: at, State: types.ReadingReady},
+	}
+	history.Add(view.Readings)
+	view.CO2Trend = history.CO2Trend()
 
-	return readings
+	return view
 }
 
-func renderScreens(readings *types.Readings) error {
+func renderScreens(readings *types.ViewState) error {
 	screens := display.ActiveScreens()
 	for _, screen := range screens {
 		sample := *readings
@@ -88,13 +92,12 @@ func renderScreens(readings *types.Readings) error {
 		}
 	}
 
-	errorReadings := *readings
-	errorReadings.Error = "Test error message for display with long text that should wrap correctly across multiple lines."
+	errorMessage := "Test error message for display with long text that should wrap correctly across multiple lines."
 
 	if err := render(
 		"error",
 		func(device *display.VirtualDisplay) {
-			display.RenderError(device, errorReadings.Error)
+			display.RenderError(device, errorMessage)
 		},
 	); err != nil {
 		return err

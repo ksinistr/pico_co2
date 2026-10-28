@@ -1,5 +1,5 @@
 // Package clockedit defines the interaction model and state transitions
-// for setting the DS3231 clock using the two touch buttons.
+// for setting the device clock using the two touch buttons.
 //
 // User flow (code-level specification):
 //
@@ -13,7 +13,7 @@
 //     0-23, minute wraps 0-59) or activates the selected action.
 //
 //  3. Save: selecting "save" and pressing right writes the pending hour and
-//     minute to the DS3231, preserving the current date and resetting seconds
+//     minute to the clock, preserving the current date and resetting seconds
 //     to zero. The editor exits and normal navigation resumes.
 //
 //  4. Cancel: selecting "cancel" and pressing right (or pressing both buttons
@@ -21,7 +21,7 @@
 //
 // State boundaries:
 //   - This package owns pure state types and transition logic only.
-//   - RTC reads/writes, display rendering, and button polling remain in the
+//   - Clock reads/writes, display rendering, and button polling remain in the
 //     app, display, and button packages respectively.
 package clockedit
 

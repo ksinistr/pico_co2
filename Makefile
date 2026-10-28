@@ -1,15 +1,18 @@
-.PHONY: all flash build size version install_tinygo_edit flash_ens160_example build_ens160_example test-format test-displays test-unit check-images
-# cmd/pico_co2 imports "machine" (TinyGo-only)
+.PHONY: all flash build size version install_tinygo_edit test-format test-displays test-unit check-images render-architecture
+# The device command and internal/platform require TinyGo.
+DEVICE ?= pico_co2
+TARGET ?= pico
+
 LINT_PKGS = ./internal/... ./pkg/... ./cmd/virtualdisplay
 
 vi:
 	tinygo-edit --target pico --editor nvim --wait
 
 flash:
-	tinygo flash -size=short -target=pico -monitor ./cmd/pico_co2/
+	tinygo flash -size=short -target=$(TARGET) -monitor ./cmd/$(DEVICE)/
 
 build:
-	tinygo build -size=full -target=pico -o main.elf ./cmd/pico_co2/
+	tinygo build -size=full -target=$(TARGET) -o main.elf ./cmd/$(DEVICE)/
 
 size:
 	go tool nm -size main.elf | sort -k 2,2 -nr | head -n 20
@@ -22,13 +25,7 @@ version:
 install_tinygo_edit:
 	go install github.com/sago35/tinygo-edit@latest
 
-flash_ens160_example:
-	tinygo flash -target=pico -monitor ./pkg/ens160/example/
-
-build_ens160_example:
-	tinygo build -target=pico -o main.uf2 ./pkg/ens160/example/
-
-test-displays:
+displays:
 	go run ./cmd/virtualdisplay/
 	git status --short images/
 
@@ -36,7 +33,7 @@ test-format:
 	test -z "$$(gofmt -l cmd internal pkg)"
 
 test-unit:
-	go test -v ./internal/app ./internal/clockedit ./internal/display ./internal/rtc ./internal/types ./internal/types/status ./pkg/fifo ./pkg/font ./pkg/layout ./pkg/widget ./pkg/miniplot ./pkg/sparkline
+	go test ./internal/... ./pkg/... ./cmd/virtualdisplay
 
 check-images: test-displays
 	test -z "$$(git status --porcelain -- images/)"

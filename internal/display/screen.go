@@ -8,9 +8,8 @@ import (
 
 // Screen describes one selectable rendering mode.
 type Screen struct {
-	ID       string
-	Required []types.MeasurementType
+	ID string
 	// Render cannot report display errors; the hardware loop relies on the watchdog for recovery.
-	Render          func(drivers.Displayer, *types.Readings)
+	Render          func(drivers.Displayer, *types.ViewState)
 	AllowsClockEdit bool
 }

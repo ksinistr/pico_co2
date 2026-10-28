@@ -20,16 +20,20 @@ Below are examples of the different display themes available:
 
 ### Required components
 
-- Raspberry Pico board
-- SSD1306 oled display
-- AHT20+ENS160 sensor
-- SCD4x sensor
-- DS3231
+- Board:
+    * Raspberry Pico board
+- Display:
+    * SSD1306 0.96" OLED display
+- Sensor CO2, one of following:
+    * ENS160 sensor
+    * SCD4x sensor
+- Source of current time:
+    * DS3231
 - Touch buttons (2x)
 
 ## Software installation
 
-1. Plug device via usb.
+1. Plug device via USB.
 2. Flash firmware: with `make flash`
 
 ## How to set up time

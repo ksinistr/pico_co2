@@ -1,8 +1,6 @@
 package display
 
 import (
-	"fmt"
-	"math"
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
@@ -18,7 +16,7 @@ import (
 //
 //	T O .        14:23              CO2 /\
 //	24 c             55 %             1200
-func RenderBarsWithTrend(display drivers.Displayer, r *types.Readings) {
+func RenderBarsWithTrend(display drivers.Displayer, r *types.ViewState) {
 	if display == nil {
 		return
 	}
@@ -31,18 +29,21 @@ func RenderBarsWithTrend(display drivers.Displayer, r *types.Readings) {
 		lf = font.New(display, font.FreemonoRegular12)
 	)
 
-	apparentC := status.ApparentTempC(r.Raw.Temperature, r.Raw.Humidity)
+	apparentC := status.ApparentTempC(float32(r.Readings.Temperature.Value), float32(r.Readings.Humidity.Value))
 
-	widget.TwoSideBar(display, sf, 0, 0, int16(status.ToSleepThermal(apparentC)), "T", 0, 2)
+	if climateReady(r.Readings) {
+		widget.TwoSideBar(display, sf, 0, 0, int16(status.ToSleepThermal(apparentC)), "T", 0, 2)
+	}
+
 	sf.Print(98, 1, "CO2")
-	widget.Trend(display, 122, 5, trendDirection(r.Calculated.CO2Trend))
+	widget.Trend(display, 122, 5, trendDirection(r.CO2Trend))
 
-	timeStr := FormatTime(r.Time.Hour, r.Time.Minute)
+	timeStr := FormatClock(r.Time)
 	layout.Center(display, sf, 1, timeStr)
 
-	tempStr := fmt.Sprintf("%.0f", math.Round(float64(r.Raw.Temperature)))
-	humStr := fmt.Sprintf("%.0f", math.Round(float64(r.Raw.Humidity)))
-	co2Str := fmt.Sprintf("%d", r.Raw.CO2)
+	tempStr := readingText(r.Readings.Temperature, "")
+	humStr := readingText(r.Readings.Humidity, "")
+	co2Str := readingText(r.Readings.CO2, "")
 
 	layout.Row(display, 17,
 		layout.Cell{Face: mf, Text: tempStr, Unit: "c", UnitFace: sf},

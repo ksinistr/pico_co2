@@ -15,8 +15,13 @@ import (
 //	8h CO2 700-1300                    42%
 //	      #       #
 //	  # # # ##  # ###
-func RenderSparklineCO2(display drivers.Displayer, r *types.Readings) {
-	data := r.History.CO2.Contiguous()
+func RenderSparklineCO2(display drivers.Displayer, r *types.ViewState) {
+	if message := readingMessage("CO2", r.Readings.CO2); message != "" {
+		RenderError(display, message)
+		return
+	}
+
+	data := r.History.CO2.Values.Contiguous()
 	title := "CO2"
 	baseline := int16(1000)
 
@@ -28,8 +33,13 @@ func RenderSparklineCO2(display drivers.Displayer, r *types.Readings) {
 //	8h T 23-29                         35%
 //	      #       #
 //	  # # # ##  # ###
-func RenderSparklineT(display drivers.Displayer, r *types.Readings) {
-	data := r.History.Temperature.Contiguous()
+func RenderSparklineT(display drivers.Displayer, r *types.ViewState) {
+	if message := readingMessage("Temperature", r.Readings.Temperature); message != "" {
+		RenderError(display, message)
+		return
+	}
+
+	data := r.History.Temperature.Values.Contiguous()
 	title := "T"
 	baseline := int16(27)
 
@@ -41,8 +51,13 @@ func RenderSparklineT(display drivers.Displayer, r *types.Readings) {
 //	8h RH 40-65                        58%
 //	      #       #
 //	  # # # ##  # ###
-func RenderSparklineRH(display drivers.Displayer, r *types.Readings) {
-	data := r.History.Humidity.Contiguous()
+func RenderSparklineRH(display drivers.Displayer, r *types.ViewState) {
+	if message := readingMessage("Humidity", r.Readings.Humidity); message != "" {
+		RenderError(display, message)
+		return
+	}
+
+	data := r.History.Humidity.Values.Contiguous()
 	title := "RH"
 	baseline := int16(45)
 

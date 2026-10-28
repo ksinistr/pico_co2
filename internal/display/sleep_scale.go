@@ -1,8 +1,6 @@
 package display
 
 import (
-	"fmt"
-	"math"
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
@@ -19,7 +17,7 @@ import (
 //	14:23          55%              WARM
 //	1200 /\                         26 c
 //	______________|###########|#|_______
-func RenderSleepScale(display drivers.Displayer, r *types.Readings) {
+func RenderSleepScale(display drivers.Displayer, r *types.ViewState) {
 	if display == nil {
 		return
 	}
@@ -32,31 +30,37 @@ func RenderSleepScale(display drivers.Displayer, r *types.Readings) {
 	)
 
 	width, _ := display.Size()
-	apparentC := status.ApparentTempC(r.Raw.Temperature, r.Raw.Humidity)
+	apparentC := status.ApparentTempC(float32(r.Readings.Temperature.Value), float32(r.Readings.Humidity.Value))
 
-	timeStr := FormatTime(r.Time.Hour, r.Time.Minute)
-	humStr := fmt.Sprintf("%.0f%%", math.Round(float64(r.Raw.Humidity)))
-	wordStr := status.ToSleepThermal(apparentC).String()
+	timeStr := FormatClock(r.Time)
+	humStr := readingText(r.Readings.Humidity, "%")
+
+	wordStr := "--"
+	if climateReady(r.Readings) {
+		wordStr = status.ToSleepThermal(apparentC).String()
+	}
 
 	layout.Three(display, sf, 0, timeStr, humStr, wordStr)
 
-	co2Str := fmt.Sprintf("%d", r.Raw.CO2)
-	tempStr := fmt.Sprintf("%.0f", math.Round(float64(r.Raw.Temperature)))
+	co2Str := readingText(r.Readings.CO2, "")
+	tempStr := readingText(r.Readings.Temperature, "")
 	y := int16(8)
 
 	lf.Print(0, y, co2Str)
-	widget.Trend(display, lf.Width(co2Str)+7, y+8, trendDirection(r.Calculated.CO2Trend))
+	widget.Trend(display, lf.Width(co2Str)+7, y+8, trendDirection(r.CO2Trend))
 
 	xTemp := width - lf.Width(tempStr) - sf.Width("c") - 1
 	lf.Print(xTemp, y, tempStr)
 	sf.Print(width-sf.Width("c"), y+9, "c")
 
-	widget.ThermalScale(display, 27, 3, apparentC, widget.ThermalRange{
-		Min:  24,
-		Warm: status.WarmApparentC,
-		Hot:  status.HotApparentC,
-		Max:  36,
-	})
+	if climateReady(r.Readings) {
+		widget.ThermalScale(display, 27, 3, apparentC, widget.ThermalRange{
+			Min:  24,
+			Warm: status.WarmApparentC,
+			Hot:  status.HotApparentC,
+			Max:  36,
+		})
+	}
 
 	if err := display.Display(); err != nil {
 		return

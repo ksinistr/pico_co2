@@ -4,7 +4,6 @@ import (
 	"errors"
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
-	"pico_co2/internal/sensors"
 	"pico_co2/internal/types"
 	"testing"
 	"time"
@@ -12,190 +11,231 @@ import (
 	"tinygo.org/x/drivers"
 )
 
-type fakeRTC struct {
+type fakeClock struct {
 	now     time.Time
 	readErr error
 	setErr  error
 	saved   time.Time
+	reads   int
 }
 
-func (r *fakeRTC) ReadTime() (time.Time, error) { return r.now, r.readErr }
-
-func (r *fakeRTC) SetTime(value time.Time) error {
+func (r *fakeClock) ReadTime() (time.Time, error) { r.reads++; return r.now, r.readErr }
+func (r *fakeClock) SetTime(value time.Time) error {
 	if r.setErr != nil {
 		return r.setErr
 	}
 	r.saved = value
+	r.now = value
 	return nil
 }
 
-func TestTickReadsSensorsOnSchedule(t *testing.T) {
-	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
+type clockFunc func() (time.Time, error)
+
+func (f clockFunc) ReadTime() (time.Time, error) { return f() }
+
+type readerFunc func(time.Time) types.Readings
+
+func (f readerFunc) Read(now time.Time) types.Readings { return f(now) }
+
+func readyReadings(now time.Time) types.Readings {
+	return types.Readings{
+		CO2:         types.Reading{Value: 800, UpdatedAt: now, State: types.ReadingReady},
+		Temperature: types.Reading{Value: 24, UpdatedAt: now, State: types.ReadingReady},
+		Humidity:    types.Reading{Value: 55, UpdatedAt: now, State: types.ReadingReady},
+	}
+}
+
+func testDependencies() Deps {
+	return Deps{
+		Display: display.NewVirtualDisplay(128, 32),
+		Screens: []display.Screen{
+			{ID: "time", AllowsClockEdit: true, Render: func(drivers.Displayer, *types.ViewState) {}},
+			{ID: "second", Render: func(drivers.Displayer, *types.ViewState) {}},
+		},
+		Sensors: readerFunc(readyReadings),
+	}
+}
+
+func TestTickClockAndHistory(t *testing.T) {
+	now := time.Date(2026, 10, 28, 14, 23, 0, 0, time.UTC)
 	for _, tt := range []struct {
-		name  string
-		steps []time.Duration
-		want  int
+		name        string
+		clock       bool
+		clockFails  bool
+		sensorFails bool
+		cached      bool
 	}{
-		{"first read", []time.Duration{0}, 1},
-		{"startup interval", []time.Duration{0, 500 * time.Millisecond, time.Second}, 2},
-		{"regular interval", []time.Duration{0, time.Minute}, 2},
+		{name: "normal", clock: true},
+		{name: "without clock"},
+		{name: "clock fails independently", clock: true, clockFails: true},
+		{name: "sensor fails independently", clock: true, sensorFails: true},
+		{name: "cached snapshot", clock: true, cached: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			reads := 0
-			deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
-				reads++
-				return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
+			deps := testDependencies()
+			clock := &fakeClock{now: now}
+			if tt.clock {
+				deps.Clock = clockFunc(clock.ReadTime)
+			}
+			if tt.clockFails {
+				clock.readErr = errors.New("clock disconnected")
+			}
+			var captured types.ViewState
+			deps.Screens[0].Render = func(_ drivers.Displayer, view *types.ViewState) { captured = *view }
+			deps.Sensors = readerFunc(func(at time.Time) types.Readings {
+				if tt.cached {
+					at = now
+				}
+				readings := readyReadings(at)
+				if tt.sensorFails {
+					readings.CO2 = types.Reading{State: types.ReadingFailed, Err: errors.New("sensor disconnected")}
+				}
+				return readings
 			})
 			state := New(deps, 16)
-			for _, offset := range tt.steps {
+			for _, offset := range []time.Duration{0, 500 * time.Millisecond, time.Second, time.Minute} {
 				state.Tick(now.Add(offset))
 			}
-			if reads != tt.want {
-				t.Fatalf("reads = %d, want %d", reads, tt.want)
+			wantCO2 := 2
+			if tt.cached {
+				wantCO2 = 1
+			}
+			if tt.sensorFails {
+				wantCO2 = 0
+			}
+			if state.history.CO2.Values.Len() != wantCO2 {
+				t.Fatalf("CO2 history length = %d", state.history.CO2.Values.Len())
+			}
+			if captured.Readings.Temperature.State != types.ReadingReady {
+				t.Fatal("lost available temperature")
+			}
+			if (tt.clock && !tt.clockFails) != !captured.Time.LastRead.IsZero() {
+				t.Fatal("wrong clock availability")
+			}
+			if tt.clock && clock.reads != 3 {
+				t.Fatalf("clock reads = %d, want 3", clock.reads)
 			}
 		})
 	}
 }
 
 func TestTickInputAndSave(t *testing.T) {
-	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
+	now := time.Date(2026, 10, 28, 14, 23, 0, 0, time.UTC)
 	for _, tt := range []struct {
 		name  string
-		setup func(*App, *fakeRTC, *bool, *bool)
-		check func(*testing.T, *App, *fakeRTC)
+		setup func(*App, *fakeClock, *bool, *bool)
+		check func(*testing.T, *App, *fakeClock)
 	}{
 		{
 			name:  "navigation",
-			setup: func(_ *App, _ *fakeRTC, _ *bool, right *bool) { *right = true },
-			check: func(t *testing.T, state *App, _ *fakeRTC) {
+			setup: func(_ *App, _ *fakeClock, _ *bool, right *bool) { *right = true },
+			check: func(t *testing.T, state *App, _ *fakeClock) {
 				if state.screen != 1 {
-					t.Fatalf("screen = %d, want 1", state.screen)
+					t.Fatal("did not navigate")
 				}
 			},
 		},
 		{
-			name:  "enter and cancel editor",
-			setup: func(_ *App, _ *fakeRTC, left, right *bool) { *left, *right = true, true },
-			check: func(t *testing.T, state *App, _ *fakeRTC) {
-				if !state.editor.Active {
-					t.Fatal("editor is inactive")
+			name:  "enter editor",
+			setup: func(_ *App, _ *fakeClock, left, right *bool) { *left, *right = true, true },
+			check: func(t *testing.T, state *App, _ *fakeClock) {
+				if !state.editor.Active || state.editor.Hour != 14 || state.editor.Minute != 23 {
+					t.Fatal("wrong editor initial time")
 				}
 			},
 		},
 		{
-			name: "save editor time",
-			setup: func(state *App, _ *fakeRTC, _ *bool, right *bool) {
-				state.editor.Active = true
+			name: "cancel editor",
+			setup: func(state *App, _ *fakeClock, left, right *bool) {
+				state.editor = clockedit.Enter(8, 15)
+				*left, *right = true, true
+			},
+			check: func(t *testing.T, state *App, clock *fakeClock) {
+				if state.editor.Active || !clock.saved.IsZero() {
+					t.Fatal("cancel saved or kept editor")
+				}
+			},
+		},
+		{
+			name: "save time",
+			setup: func(state *App, _ *fakeClock, _ *bool, right *bool) {
+				state.editor = clockedit.Enter(8, 15)
 				state.editor.Field = clockedit.FieldSave
-				state.editor.Hour = 8
-				state.editor.Minute = 15
 				*right = true
 			},
-			check: func(t *testing.T, state *App, clock *fakeRTC) {
-				if state.editor.Active {
-					t.Fatal("editor is active after save")
+			check: func(t *testing.T, state *App, clock *fakeClock) {
+				if state.editor.Active || clock.saved.Hour() != 8 || clock.saved.Minute() != 15 || state.clock.Hour != 8 {
+					t.Fatal("did not save time")
 				}
-				if clock.saved.Hour() != 8 || clock.saved.Minute() != 15 {
-					t.Fatalf("saved = %v", clock.saved)
+				if clock.saved.Day() != now.Day() || clock.saved.Second() != 0 {
+					t.Fatal("changed date or did not reset seconds")
 				}
 			},
 		},
 		{
-			name: "save error reopens editor",
-			setup: func(state *App, clock *fakeRTC, _ *bool, right *bool) {
-				state.editor.Active = true
+			name: "save error",
+			setup: func(state *App, clock *fakeClock, _ *bool, right *bool) {
+				state.editor = clockedit.Enter(8, 15)
 				state.editor.Field = clockedit.FieldSave
-				state.editor.Hour = 8
-				state.editor.Minute = 15
 				clock.setErr = errors.New("write failed")
 				*right = true
 			},
-			check: func(t *testing.T, state *App, _ *fakeRTC) {
-				if !state.editor.Active || state.readings.Error == "" {
-					t.Fatalf("editor active = %t, error = %q", state.editor.Active, state.readings.Error)
+			check: func(t *testing.T, state *App, _ *fakeClock) {
+				if !state.editor.Active || state.clockErr == nil {
+					t.Fatal("missing save error")
+				}
+			},
+		},
+		{
+			name: "clock read error",
+			setup: func(_ *App, clock *fakeClock, left, right *bool) {
+				clock.readErr = errors.New("read failed")
+				*left, *right = true, true
+			},
+			check: func(t *testing.T, state *App, _ *fakeClock) {
+				if state.editor.Active || state.clockErr == nil {
+					t.Fatal("entered editor without clock")
+				}
+			},
+		},
+		{
+			name:  "without clock",
+			setup: func(state *App, _ *fakeClock, left, right *bool) { state.deps.Clock = nil; *left, *right = true, true },
+			check: func(t *testing.T, state *App, _ *fakeClock) {
+				if state.editor.Active {
+					t.Fatal("entered editor without clock")
+				}
+			},
+		},
+		{
+			name: "read-only clock",
+			setup: func(state *App, clock *fakeClock, left, right *bool) {
+				state.deps.Clock = clockFunc(clock.ReadTime)
+				state.deps.SetTime = nil
+				*left, *right = true, true
+			},
+			check: func(t *testing.T, state *App, clock *fakeClock) {
+				if state.editor.Active || state.clock.LastRead.IsZero() || !clock.saved.IsZero() {
+					t.Fatal("read-only clock was edited or did not provide time")
 				}
 			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			left, right := false, false
-			clock := &fakeRTC{now: now}
-			deps := testDependencies(clock, func() ([]types.Measurement, error) { return []types.Measurement{{Type: types.MeasurementTypeCO2}}, nil })
+			clock := &fakeClock{now: now}
+			deps := testDependencies()
+			deps.Clock = clock
+			deps.SetTime = clock.SetTime
 			deps.LeftPressed = func() bool { value := left; left = false; return value }
 			deps.RightPressed = func() bool { value := right; right = false; return value }
 			state := New(deps, 16)
-			state.readings.Time.Hour, state.readings.Time.Minute = 14, 23
 			tt.setup(state, clock, &left, &right)
 			state.Tick(now)
 			tt.check(t, state, clock)
 		})
 	}
 }
-
-func TestTickRecoversFromSensorError(t *testing.T) {
-	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
-	reads := 0
-	deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
-		reads++
-		if reads == 1 {
-			return nil, errors.New("sensor unavailable")
-		}
-		return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
-	})
-	state := New(deps, 16)
-	state.Tick(now)
-	if state.readings.Error == "" {
-		t.Fatal("missing sensor error")
-	}
-	state.Tick(now.Add(time.Second))
-	if state.readings.Error != "" {
-		t.Fatalf("error = %q", state.readings.Error)
-	}
-}
-
-func TestTickShowsErrorWhenSensorsFail(t *testing.T) {
-	now := time.Date(2026, 9, 17, 14, 23, 0, 0, time.UTC)
-	rendered := false
-	deps := testDependencies(&fakeRTC{now: now}, func() ([]types.Measurement, error) {
-		return nil, errors.New("sensor unavailable")
-	})
-	deps.Screens[0].Render = func(drivers.Displayer, *types.Readings) { rendered = true }
-	monitor := New(deps, 16)
-	monitor.editor = clockedit.Enter(14, 23)
-
-	monitor.Tick(now)
-
-	if rendered || monitor.readings.Error == "" {
-		t.Fatal("sensor error did not override editor")
-	}
-}
-
-func testDependencies(clock *fakeRTC, read readerFunc) Deps {
-	return Deps{
-		Display: display.NewVirtualDisplay(128, 32),
-		Screens: []display.Screen{
-			{ID: "time", AllowsClockEdit: true, Render: func(drivers.Displayer, *types.Readings) {}},
-			{ID: "second", Render: func(drivers.Displayer, *types.Readings) {}},
-		},
-		RTC: clock,
-		Sensors: []Registration{
-			{ID: "test", Reader: read, Capabilities: []types.MeasurementType{types.MeasurementTypeCO2}, Interval: time.Minute, StartupInterval: time.Second, StartupWindow: time.Minute},
-			{ID: "rtc", Reader: sensors.Clock{Source: clock}, Capabilities: []types.MeasurementType{types.MeasurementTypeTime}, Interval: time.Second},
-		},
-		Schedule: Schedule{
-			TimeReadInterval:       time.Second,
-			StartupReadInterval:    time.Second,
-			StartupWindow:          time.Minute,
-			SensorReadInterval:     time.Minute,
-			HistoryInterval:        time.Minute,
-			SimultaneousPressDelay: 400 * time.Millisecond,
-		},
-	}
-}
-
-type readerFunc func() ([]types.Measurement, error)
-
-func (f readerFunc) Read() ([]types.Measurement, error) { return f() }
 
 type countedDisplay struct {
 	*display.VirtualDisplay
@@ -205,26 +245,26 @@ type countedDisplay struct {
 func (d *countedDisplay) Display() error { d.sends++; return nil }
 
 func TestTickFrameChanges(t *testing.T) {
-	now := time.Date(2026, 10, 21, 14, 23, 0, 0, time.UTC)
-	clock := &fakeRTC{now: now}
+	now := time.Date(2026, 10, 28, 14, 23, 0, 0, time.UTC)
+	clock := &fakeClock{now: now}
 	target := &countedDisplay{VirtualDisplay: display.NewVirtualDisplay(128, 32)}
 	failing := false
-	deps := testDependencies(clock, func() ([]types.Measurement, error) {
-		if failing {
-			return nil, errors.New("disconnected")
-		}
-		return []types.Measurement{{Type: types.MeasurementTypeCO2, Value: 800}}, nil
-	})
-	deps.Display = target
+	deps := testDependencies()
+	deps.Clock, deps.Display = clock, target
 	deps.Screens[0].Render = display.RenderTime
-	deps.Sensors[0].Interval = time.Second
+	deps.Sensors = readerFunc(func(at time.Time) types.Readings {
+		readings := readyReadings(at)
+		if failing {
+			readings.CO2.State = types.ReadingFailed
+		}
+		return readings
+	})
 	state := New(deps, 16)
 	for _, tt := range []struct {
-		name   string
-		offset time.Duration
-		fail   bool
-		minute int
-		sends  int
+		name          string
+		offset        time.Duration
+		fail          bool
+		minute, sends int
 	}{
 		{"initial", 0, false, 23, 1},
 		{"new sample same pixels", time.Second, false, 23, 1},
@@ -235,10 +275,39 @@ func TestTickFrameChanges(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			failing = tt.fail
-			clock.now = time.Date(2026, 10, 21, 14, tt.minute, 0, 0, time.UTC)
+			clock.now = time.Date(2026, 10, 28, 14, tt.minute, 0, 0, time.UTC)
 			state.Tick(now.Add(tt.offset))
 			if target.sends != tt.sends {
-				t.Fatalf("display sends=%d want=%d", target.sends, tt.sends)
+				t.Fatalf("display sends = %d, want %d", target.sends, tt.sends)
+			}
+		})
+	}
+}
+
+func TestSavePreservesDateAndLocation(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		current      time.Time
+		hour, minute int
+	}{
+		{"midnight", time.Date(2026, 12, 31, 23, 59, 58, 500, time.UTC), 0, 0},
+		{"end of day", time.Date(2026, 1, 1, 0, 0, 30, 500, time.UTC), 23, 59},
+		{"local time", time.Date(2026, 10, 28, 14, 23, 45, 500, time.FixedZone("UTC+2", 2*60*60)), 8, 15},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := &fakeClock{now: tt.current}
+			deps := testDependencies()
+			deps.Clock = clock
+			deps.SetTime = clock.SetTime
+			state := New(deps, 8)
+			state.save(clockedit.Enter(tt.hour, tt.minute), tt.current)
+			want := time.Date(tt.current.Year(), tt.current.Month(), tt.current.Day(),
+				tt.hour, tt.minute, 0, 0, tt.current.Location())
+			if !clock.saved.Equal(want) || clock.saved.Location() != tt.current.Location() {
+				t.Fatalf("saved time = %v, want %v", clock.saved, want)
+			}
+			if state.clock.Hour != tt.hour || state.clock.Minute != tt.minute || state.clockErr != nil {
+				t.Fatal("saved time was not reflected in the application")
 			}
 		})
 	}

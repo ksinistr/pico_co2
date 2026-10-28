@@ -1,8 +1,6 @@
 package display
 
 import (
-	"fmt"
-	"math"
 	"pico_co2/internal/types"
 	"pico_co2/internal/types/status"
 	"pico_co2/pkg/font"
@@ -45,6 +43,7 @@ const (
 // glanceCell is one reading: the number to read up close and the gauge that
 // carries it across the room.
 type glanceCell struct {
+	ready           bool
 	label           string
 	text            string
 	value, min, max float32
@@ -60,8 +59,8 @@ type glanceCell struct {
 func GlanceCentered(
 	clockType font.FontType,
 	barHeight int16,
-) func(drivers.Displayer, *types.Readings) {
-	return func(display drivers.Displayer, r *types.Readings) {
+) func(drivers.Displayer, *types.ViewState) {
+	return func(display drivers.Displayer, r *types.ViewState) {
 		if display == nil {
 			return
 		}
@@ -102,8 +101,8 @@ func GlanceCentered(
 func GlanceLabels(
 	clockType font.FontType,
 	barHeight int16,
-) func(drivers.Displayer, *types.Readings) {
-	return func(display drivers.Displayer, r *types.Readings) {
+) func(drivers.Displayer, *types.ViewState) {
+	return func(display drivers.Displayer, r *types.ViewState) {
 		if display == nil {
 			return
 		}
@@ -137,8 +136,8 @@ func GlanceLabels(
 func GlanceLeft(
 	clockType font.FontType,
 	barHeight int16,
-) func(drivers.Displayer, *types.Readings) {
-	return func(display drivers.Displayer, r *types.Readings) {
+) func(drivers.Displayer, *types.ViewState) {
+	return func(display drivers.Displayer, r *types.ViewState) {
 		if display == nil {
 			return
 		}
@@ -153,7 +152,7 @@ func GlanceLeft(
 		clock.Print(
 			0,
 			(hgt-clock.Height())/2,
-			FormatTime(r.Time.Hour, r.Time.Minute),
+			FormatClock(r.Time),
 		)
 
 		y := int16(1)
@@ -181,8 +180,8 @@ func GlanceLeftSections(
 	barHeight int16,
 	barWidth int16,
 	barGap int16,
-) func(drivers.Displayer, *types.Readings) {
-	return func(display drivers.Displayer, r *types.Readings) {
+) func(drivers.Displayer, *types.ViewState) {
+	return func(display drivers.Displayer, r *types.ViewState) {
 		if display == nil {
 			return
 		}
@@ -197,7 +196,7 @@ func GlanceLeftSections(
 		clock.Print(
 			1,
 			(hgt-clock.Height())/2,
-			FormatTime(r.Time.Hour, r.Time.Minute),
+			FormatClock(r.Time),
 		)
 
 		y := int16(1)
@@ -222,39 +221,33 @@ func GlanceLeftSections(
 	}
 }
 
-func glanceCells(r *types.Readings) [3]glanceCell {
-	heatIndex := status.HeatIndexVal(r.Raw.Temperature, r.Raw.Humidity)
-	humidity := float32(math.Round(float64(r.Raw.Humidity)))
-	dewPoint := status.Dewpoint(float64(r.Raw.Temperature), float64(r.Raw.Humidity))
+func glanceCells(r *types.ViewState) []glanceCell {
+	heatIndex := status.HeatIndexVal(float32(r.Readings.Temperature.Value), float32(r.Readings.Humidity.Value))
+	dewPoint := status.Dewpoint(r.Readings.Temperature.Value, r.Readings.Humidity.Value)
 
-	return [3]glanceCell{
+	return []glanceCell{
 		{
+			ready: r.Readings.CO2.State == types.ReadingReady,
 			label: "CO2",
-			text:  fmt.Sprintf("%d", r.Raw.CO2),
-			value: float32(r.Raw.CO2),
+			text:  readingText(r.Readings.CO2, ""),
+			value: float32(r.Readings.CO2.Value),
 			min:   glanceCO2Min,
 			max:   glanceCO2Max,
 			mark:  glanceCO2Warn,
 		},
 		{
+			ready: climateReady(r.Readings),
 			label: "T",
-			text:  fmt.Sprintf("%.0fc", math.Round(float64(r.Raw.Temperature))),
+			text:  readingText(r.Readings.Temperature, "c"),
 			value: heatIndex,
 			min:   glanceHeatMin,
 			max:   glanceHeatMax,
 			mark:  glanceHeatWarm,
 		},
-		// {
-		// 	label: "RH",
-		// 	text:  fmt.Sprintf("%.0f%%", humidity),
-		// 	value: humidity,
-		// 	min:   glanceHumidityMin,
-		// 	max:   glanceHumidityMax,
-		// 	mark:  glanceHumidityWet,
-		// },
 		{
+			ready: climateReady(r.Readings),
 			label: "RH",
-			text:  fmt.Sprintf("%.0f%%", humidity),
+			text:  readingText(r.Readings.Humidity, "%"),
 			value: float32(dewPoint),
 			min:   glanceDewPointMin,
 			max:   glanceDewPointMax,
@@ -266,14 +259,14 @@ func glanceCells(r *types.Readings) [3]glanceCell {
 func glanceClock(
 	display drivers.Displayer,
 	clockType font.FontType,
-	r *types.Readings,
+	r *types.ViewState,
 ) {
 	clock := font.New(display, clockType)
 	layout.Center(
 		display,
 		clock,
 		(glanceClockBand-clock.Height())/2,
-		FormatTime(r.Time.Hour, r.Time.Minute),
+		FormatClock(r.Time),
 	)
 }
 
@@ -287,6 +280,10 @@ func glanceGauge(
 	x, y, width, height int16,
 	cell glanceCell,
 ) {
+	if !cell.ready {
+		return
+	}
+
 	widget.Gauge(
 		display,
 		x,
@@ -315,6 +312,10 @@ func glanceGaugeWithoutMark(
 	x, y, width, height int16,
 	cell glanceCell,
 ) {
+	if !cell.ready {
+		return
+	}
+
 	widget.Gauge(
 		display,
 		x,
@@ -336,6 +337,10 @@ func glanceGaugeSections(
 	barGap int16,
 	cell glanceCell,
 ) {
+	if !cell.ready {
+		return
+	}
+
 	widget.SquareBar(
 		display,
 		x,
@@ -356,6 +361,10 @@ func glanceGaugeBordered(
 	x, y, width, height int16,
 	cell glanceCell,
 ) {
+	if !cell.ready {
+		return
+	}
+
 	widget.GaugeBordered(
 		display,
 		x,

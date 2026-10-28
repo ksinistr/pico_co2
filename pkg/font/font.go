@@ -9,6 +9,7 @@ package font
 
 import (
 	"image/color"
+	"strconv"
 
 	"tinygo.org/x/drivers"
 	"tinygo.org/x/tinyfont"
@@ -71,13 +72,6 @@ func New(display drivers.Displayer, typ FontType) Face {
 	return face
 }
 
-// Print draws text with (x,y) as its top-left corner and returns its width.
-//
-//	(x,y)
-//	  +----------+
-//	  |text      |
-//	  +----------+
-//	  |< width ->|
 func (f Face) Print(x, y int16, text string) int16 {
 	if f.display == nil || f.font == nil {
 		return 0
@@ -88,15 +82,38 @@ func (f Face) Print(x, y int16, text string) int16 {
 	return f.Width(text)
 }
 
-// Width returns the horizontal pixel extent of text without drawing it.
-// Proggy is an ASCII-only fixed-width face, so its width is measured in bytes.
-//
-//	|<---- Width("text") ---->|
-//	text
+func (f Face) PrintFloat64Rounded(x, y int16, num float64) int16 {
+	if f.display == nil || f.font == nil {
+		return 0
+	}
+
+	text := strconv.FormatFloat(num, 'f', 0, 64)
+
+	tinyfont.WriteLine(f.display, f.font, x, y+f.height, text, color.RGBA{255, 255, 255, 255})
+
+	return f.Width(text)
+}
+
 func (f Face) Width(text string) int16 {
 	if f.font == nil {
 		return 0
 	}
+
+	if f.fixed > 0 {
+		return int16(len(text)) * f.fixed
+	}
+
+	_, width := tinyfont.LineWidth(f.font, text)
+
+	return int16(width)
+}
+
+func (f Face) WidthFloat64Rounded(num float64) int16 {
+	if f.font == nil {
+		return 0
+	}
+
+	text := strconv.FormatFloat(num, 'f', 0, 64)
 
 	if f.fixed > 0 {
 		return int16(len(text)) * f.fixed

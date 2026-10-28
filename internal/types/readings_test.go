@@ -46,14 +46,14 @@ func TestCO2TrendCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := InitReadings(128, time.Minute)
+			r := NewHistory(128, time.Minute)
 			start := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 			for i, co2 := range tt.readings {
-				r.AddReadingsAt(start.Add(time.Duration(i)*time.Minute), co2, 22.0, 50.0)
+				r.Add(Readings{CO2: Reading{Value: float64(co2), UpdatedAt: start.Add(time.Duration(i) * time.Minute), State: ReadingReady}})
 			}
 
-			if r.Calculated.CO2Trend != tt.expectedTrend {
-				t.Errorf("Expected trend %v, got %v", tt.expectedTrend, r.Calculated.CO2Trend)
+			if r.CO2Trend() != tt.expectedTrend {
+				t.Errorf("Expected trend %v, got %v", tt.expectedTrend, r.CO2Trend())
 			}
 		})
 	}
@@ -70,12 +70,12 @@ func TestHistoryRecordsAtIntervalBoundary(t *testing.T) {
 		{"multiple intervals", []time.Duration{0, time.Minute, 2 * time.Minute}, 3},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			readings := InitReadings(8, time.Minute)
+			readings := NewHistory(8, time.Minute)
 			start := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 			for _, offset := range tt.offsets {
-				readings.AddReadingsAt(start.Add(offset), 800, 24, 50)
+				readings.Add(Readings{CO2: Reading{Value: 800, UpdatedAt: start.Add(offset), State: ReadingReady}})
 			}
-			if got := readings.History.CO2.Len(); got != tt.want {
+			if got := readings.CO2.Values.Len(); got != tt.want {
 				t.Fatalf("history length = %d, want %d", got, tt.want)
 			}
 		})

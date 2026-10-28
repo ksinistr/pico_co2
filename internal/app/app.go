@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"pico_co2/internal/clockedit"
 	"pico_co2/internal/display"
-	"pico_co2/internal/rtc"
 	"pico_co2/internal/types"
-	"slices"
 	"time"
 
 	"tinygo.org/x/drivers"
@@ -32,11 +30,20 @@ func DefaultSchedule() Schedule {
 	}
 }
 
+type Sensors interface {
+	Read(now time.Time) types.Readings
+}
+
+type Clock interface {
+	ReadTime() (time.Time, error)
+}
+
 type Deps struct {
 	Display      drivers.Displayer
 	Screens      []display.Screen
-	RTC          rtc.RTC
-	Sensors      []Registration
+	Clock        Clock
+	SetTime      func(time.Time) error
+	Sensors      Sensors
 	LeftPressed  func() bool
 	RightPressed func() bool
 	Schedule     Schedule
@@ -44,13 +51,15 @@ type Deps struct {
 
 type App struct {
 	deps          Deps
-	readings      *types.Readings
+	readings      types.Readings
+	history       *types.History
+	clock         types.Time
+	nextTimeRead  time.Time
+	clockErr      error
 	screen        int
 	editor        clockedit.EditorState
 	lastLeftTime  time.Time
 	lastRightTime time.Time
-	collector     *Collector
-	snapshot      types.Measurements
 }
 
 func New(deps Deps, queueCapacity int) *App {
@@ -59,14 +68,11 @@ func New(deps Deps, queueCapacity int) *App {
 	}
 
 	deps.Schedule = scheduleWithDefaults(deps.Schedule)
-
-	output := display.NewFrameDisplay(deps.Display)
-	deps.Display = output
+	deps.Display = display.NewFrameDisplay(deps.Display)
 
 	return &App{
-		collector: NewCollector(deps.Sensors, queueCapacity, deps.Schedule.HistoryInterval),
-		deps:      deps,
-		readings: types.InitReadings(
+		deps: deps,
+		history: types.NewHistory(
 			queueCapacity,
 			deps.Schedule.HistoryInterval,
 		),
@@ -103,21 +109,42 @@ func scheduleWithDefaults(schedule Schedule) Schedule {
 }
 
 func (a *App) Tick(now time.Time) {
-	if a.readings == nil || len(a.deps.Screens) == 0 {
-		return
+	if a.deps.Sensors != nil {
+		a.readings = a.deps.Sensors.Read(now)
+		a.history.Add(a.readings)
 	}
 
-	if !a.handleInput(now) {
-		a.updateReadings(now)
-	}
-
+	a.readTime(now)
+	a.handleInput(now)
 	a.render()
 }
 
-func (a *App) handleInput(now time.Time) bool {
+func (a *App) readTime(now time.Time) {
+	if a.deps.Clock == nil || now.Before(a.nextTimeRead) {
+		return
+	}
+
+	a.nextTimeRead = now.Add(a.deps.Schedule.TimeReadInterval)
+
+	current, err := a.deps.Clock.ReadTime()
+	if err != nil {
+		a.clockErr = fmt.Errorf("clock read: %w", err)
+		return
+	}
+
+	a.clockErr = nil
+	a.clock = types.Time{
+		Hour:     current.Hour(),
+		Minute:   current.Minute(),
+		LastRead: now,
+	}
+}
+
+func (a *App) handleInput(now time.Time) {
 	left := pressed(a.deps.LeftPressed)
 
 	right := pressed(a.deps.RightPressed)
+
 	if left {
 		a.lastLeftTime = now
 	}
@@ -126,31 +153,39 @@ func (a *App) handleInput(now time.Time) bool {
 		a.lastRightTime = now
 	}
 
-	current := a.currentScreen()
-	result := clockedit.ProcessInput(a.editor, clockedit.ButtonEvent{
-		LeftPressed: left, RightPressed: right, LeftTime: a.lastLeftTime, RightTime: a.lastRightTime,
-	}, current.AllowsClockEdit && a.deps.RTC != nil, a.deps.Schedule.SimultaneousPressDelay)
+	result := clockedit.ProcessInput(
+		a.editor,
+		clockedit.ButtonEvent{
+			LeftPressed:  left,
+			RightPressed: right,
+			LeftTime:     a.lastLeftTime,
+			RightTime:    a.lastRightTime,
+		},
+		a.allowsClockEdit(),
+		a.deps.Schedule.SimultaneousPressDelay,
+	)
 
 	if result.AttemptEntry {
-		a.editor = clockedit.Enter(a.readings.Time.Hour, a.readings.Time.Minute)
+		a.editor = clockedit.Enter(a.clock.Hour, a.clock.Minute)
 		a.resetButtonTimes()
 
-		return true
+		return
 	}
 
 	if result.Exited {
 		if result.ShouldSave {
-			a.save(a.deps.RTC, result.State, now)
+			a.save(result.State, now)
 		} else {
 			a.editor = clockedit.EditorState{}
 		}
 
 		a.resetButtonTimes()
 
-		return true
+		return
 	}
 
 	a.editor = result.State
+
 	if result.NavLeft {
 		a.screen = (a.screen - 1 + len(a.deps.Screens)) % len(a.deps.Screens)
 		a.lastLeftTime = time.Time{}
@@ -160,74 +195,59 @@ func (a *App) handleInput(now time.Time) bool {
 		a.screen = (a.screen + 1) % len(a.deps.Screens)
 		a.lastRightTime = time.Time{}
 	}
-
-	return false
 }
 
-func (a *App) save(clock rtc.RTC, editor clockedit.EditorState, now time.Time) {
-	current, err := clock.ReadTime()
+func (a *App) save(editor clockedit.EditorState, now time.Time) {
+	current, err := a.deps.Clock.ReadTime()
 	if err != nil {
 		a.editor = clockedit.HandleSaveAttempt(editor, err)
-		a.readings.Error = fmt.Sprintf("RTC read: %v", err)
+		a.clockErr = fmt.Errorf("clock read: %w", err)
 
 		return
 	}
 
-	updated, err := rtc.SaveTime(clock, editor.Hour, editor.Minute, current)
+	updated := time.Date(current.Year(), current.Month(), current.Day(),
+		editor.Hour, editor.Minute, 0, 0, current.Location())
+	err = a.deps.SetTime(updated)
 
 	a.editor = clockedit.HandleSaveAttempt(editor, err)
 	if err != nil {
-		a.readings.Error = fmt.Sprintf("RTC save: %v", err)
+		a.clockErr = fmt.Errorf("clock save: %w", err)
 		return
 	}
 
-	a.readings.Time.Hour = updated.Hour()
-	a.readings.Time.Minute = updated.Minute()
-	a.readings.Time.LastRead = now
-	a.readings.Error = ""
-	a.collector.Invalidate(types.MeasurementTypeTime)
-}
-
-func (a *App) updateReadings(now time.Time) {
-	values, err := a.collector.Read(now)
-	if err != nil {
-		a.readings.Error = err.Error()
-		return
-	}
-
-	a.readings.Error = ""
-	if slices.Equal(a.snapshot, values) {
-		return
-	}
-
-	a.snapshot = values
-	a.readings.Measurements = values.Grouped()
-	a.readings.SensorHistory = a.collector.History
-	a.readings.Project()
+	a.clock.Hour = updated.Hour()
+	a.clock.Minute = updated.Minute()
+	a.clock.LastRead = now
+	a.clockErr = nil
+	a.nextTimeRead = now.Add(a.deps.Schedule.TimeReadInterval)
 }
 
 func (a *App) render() {
-	a.readings.ClockEdit = types.ClockEdit{
-		Active: a.editor.Active,
-		Field:  a.editor.Field,
-		Hour:   a.editor.Hour,
-		Minute: a.editor.Minute,
+	view := types.ViewState{
+		Readings: a.readings,
+		History:  a.history,
+		CO2Trend: a.history.CO2Trend(),
+		Time:     a.clock,
+		ClockEdit: types.ClockEdit{
+			Active: a.editor.Active,
+			Field:  a.editor.Field,
+			Hour:   a.editor.Hour,
+			Minute: a.editor.Minute,
+		},
 	}
+	if a.clockErr != nil {
+		view.Time = types.Time{}
 
-	current := a.currentScreen()
-	for _, kind := range current.Required {
-		if _, ok := a.readings.Measurements[kind].First(); !ok && a.readings.Error == "" {
-			display.RenderError(a.deps.Display, fmt.Sprintf("No %s measurement", kind))
+		if a.editor.Active {
+			display.RenderError(a.deps.Display, a.clockErr.Error())
 			return
 		}
 	}
 
-	switch {
-	case a.readings.Error != "":
-		display.RenderError(a.deps.Display, a.readings.Error)
-	default:
-		a.currentScreen().Render(a.deps.Display, a.readings)
-	}
+	current := a.currentScreen()
+
+	current.Render(a.deps.Display, &view)
 }
 
 func (a *App) currentScreen() display.Screen {
@@ -244,3 +264,9 @@ func (a *App) resetButtonTimes() {
 }
 
 func pressed(read func() bool) bool { return read != nil && read() }
+
+func (a *App) allowsClockEdit() bool {
+	return a.currentScreen().AllowsClockEdit && a.deps.Clock != nil && a.deps.SetTime != nil &&
+		!a.clock.LastRead.IsZero() &&
+		a.clockErr == nil
+}
